@@ -226,15 +226,13 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		errorHandler(w, r, http.StatusNotFound)
 		return
 	}
-	http.HandleFunc("/ws/draw/", drawWsHandler)
-	http.HandleFunc("/ws/room/", roomWsHandler)
-	http.HandleFunc("/room/", roomHandler) // create, list room .etc
-	fmt.Fprint(w, "/ws/draw/<roomId>?userId=<userId> for ")
-	fmt.Fprint(w, "/ws/room/<roomId>?userId=<userId> for ")
-	fmt.Fprint(w, "/room/list for list rooms")
-	fmt.Fprint(w, "/room/create for create a room")
-	fmt.Fprint(w, "/room/join?userId=<userId>&roomId<roomId> for user to join a room")
-	fmt.Fprint(w, "/room/quit?userId=<userId>&roomId<roomId> for user to quit a room")
+
+	fmt.Fprintln(w, "/ws/draw/<roomId>?userId=<userId> for ")
+	fmt.Fprintln(w, "/ws/room/<roomId>?userId=<userId> for ")
+	fmt.Fprintln(w, "/room/list for list rooms")
+	fmt.Fprintln(w, "/room/create for create a room")
+	fmt.Fprintln(w, "/room/join?userId=<userId>&roomId<roomId> for user to join a room")
+	fmt.Fprintln(w, "/room/quit?userId=<userId>&roomId<roomId> for user to quit a room")
 }
 
 func errorHandler(w http.ResponseWriter, r *http.Request, status int) {

@@ -226,7 +226,15 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		errorHandler(w, r, http.StatusNotFound)
 		return
 	}
-	fmt.Fprint(w, "welcome home")
+	http.HandleFunc("/ws/draw/", drawWsHandler)
+	http.HandleFunc("/ws/room/", roomWsHandler)
+	http.HandleFunc("/room/", roomHandler) // create, list room .etc
+	fmt.Fprint(w, "/ws/draw/<roomId>?userId=<userId> for ")
+	fmt.Fprint(w, "/ws/room/<roomId>?userId=<userId> for ")
+	fmt.Fprint(w, "/room/list for list rooms")
+	fmt.Fprint(w, "/room/create for create a room")
+	fmt.Fprint(w, "/room/join?userId=<userId>&roomId<roomId> for user to join a room")
+	fmt.Fprint(w, "/room/quit?userId=<userId>&roomId<roomId> for user to quit a room")
 }
 
 func errorHandler(w http.ResponseWriter, r *http.Request, status int) {

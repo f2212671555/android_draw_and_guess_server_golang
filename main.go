@@ -338,10 +338,7 @@ func generateRoomId() string {
 }
 
 func generateUuId() string {
-	uuid, err := uuid.NewV4()
-	if err != nil {
-		println(err)
-	}
+	uuid := uuid.Must(uuid.NewV4())
 	return uuid.String()
 }
 

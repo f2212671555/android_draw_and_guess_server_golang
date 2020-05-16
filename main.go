@@ -212,7 +212,7 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	log.Println("connect !!")
-
+	conn.WriteMessage(1, []byte("HI"))
 	roomsMap[roomId].ClientsMap[userId].RoomConn = conn
 	clients[conn] = new(Client)
 	clients[conn].RoomId = roomId

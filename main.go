@@ -352,8 +352,8 @@ var roomsMap = make(map[string]*Room)
 
 func roomCreateHandler(w http.ResponseWriter, r *http.Request) {
 
-	var roomTmp Room
-	err := json.NewDecoder(r.Body).Decode(&roomTmp)
+	roomTmp := &Room{}
+	err := json.NewDecoder(r.Body).Decode(roomTmp)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

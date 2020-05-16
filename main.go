@@ -22,14 +22,14 @@ type Client struct {
 }
 
 type Room struct {
-	Id         string             `json:"id,omitempty"`
-	Name       string             `json:"name,omitempty"`
+	Id         string             `json:"roomId,omitempty"`
+	Name       string             `json:"roomName,omitempty"`
 	ClientsMap map[string]*Client `json:"usersMap,omitempty"`
 }
 
 type User struct {
-	Id   string `json:"id,omitempty"`
-	Name string `json:"name,omitempty"`
+	Id   string `json:"userId,omitempty"`
+	Name string `json:"userName,omitempty"`
 }
 
 var clients = make(map[*websocket.Conn]*Client)

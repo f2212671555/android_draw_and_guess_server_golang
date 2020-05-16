@@ -364,7 +364,7 @@ func roomCreateHandler(w http.ResponseWriter, r *http.Request) {
 	roomsMap[roomId] = room
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, "/room/create")
-	fmt.Fprintln(w, "create room success!!")
+	fmt.Fprintln(w, roomId)
 }
 
 type UserJoinRoom struct {

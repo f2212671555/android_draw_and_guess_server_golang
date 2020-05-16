@@ -328,7 +328,18 @@ func roomHandler(w http.ResponseWriter, r *http.Request) {
 	} else if r.URL.Path == "/room/quit" {
 		roomQuitHandler(w, r)
 		return
+	} else if r.URL.Path == "/room/startGame" {
+		roomStartGameHandler(w, r)
+		return
 	}
+}
+
+func roomStartGameHandler(w http.ResponseWriter, r *http.Request) {
+	category, topic := randomTopic()
+	text := `{"category":"` + category + `","` + `topic":"` + topic + `"}`
+	roomId := r.URL.Query().Get("roomId")
+	roomTopic[roomId] = topic
+	fmt.Fprint(w, text)
 }
 
 func roomListHandler(w http.ResponseWriter, r *http.Request) {

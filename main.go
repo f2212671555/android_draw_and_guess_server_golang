@@ -31,6 +31,7 @@ type User struct {
 }
 
 var clients = make(map[*websocket.Conn]*Client)
+var port = "8899"
 
 func main() {
 
@@ -42,7 +43,7 @@ func main() {
 	http.HandleFunc("/test/", testHandler)          // test print
 
 	log.Println("server start at :8899")
-	port := "8899"
+
 	if v := os.Getenv("PORT"); len(v) > 0 {
 		port = v
 	}
@@ -226,7 +227,7 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		errorHandler(w, r, http.StatusNotFound)
 		return
 	}
-
+	fmt.Fprintln(w, "listen: "+port+" port")
 	fmt.Fprintln(w, "/ws/draw/<roomId>?userId=<userId> for ")
 	fmt.Fprintln(w, "/ws/room/<roomId>?userId=<userId> for ")
 	fmt.Fprintln(w, "/room/list for list rooms")
@@ -255,6 +256,7 @@ func roomHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	} else if r.URL.Path == "/room/quit" {
 		roomQuitHandler(w, r)
+		return
 	}
 }
 

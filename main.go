@@ -169,25 +169,17 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 		clientsMap := currentRoom.ClientsMap // get the users in this room
 		for _, client := range clientsMap {
 			if client.User.Id != clients[conn].User.Id {
-				respMsg := clients[conn].User.Name + " say::" + string(msg)
 				if client.DrawConn == nil {
 					break
 				}
-				err = client.DrawConn.WriteMessage(mtype, []byte(respMsg))
+				err = client.DrawConn.WriteMessage(mtype, msg)
 				if err != nil {
 					log.Println("write:", err)
 					break
 				}
 			}
-
-		}
-
-		if err != nil {
-			log.Println("write:", err)
-			break
 		}
 	}
-
 }
 
 type Message struct {
@@ -328,7 +320,7 @@ func roomHandler(w http.ResponseWriter, r *http.Request) {
 	} else if r.URL.Path == "/room/quit" {
 		roomQuitHandler(w, r)
 		return
-	} else if r.URL.Path == "/room/startGame" {
+	} else if r.URL.Path == "/room/startDraw" {
 		roomStartGameHandler(w, r)
 		return
 	}
@@ -375,22 +367,34 @@ func roomCreateHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "create room success!!")
 }
 
+type UserJoinRoom struct {
+	UserId   string `json:"userId,omitempty"`
+	UserName string `json:"userName,omitempty"`
+	RoomId   string `json:"roomId,omitempty"`
+}
+
 func roomJoinHandler(w http.ResponseWriter, r *http.Request) {
 
-	userId := r.URL.Query().Get("userId")
-	userName := r.URL.Query().Get("userName")
-	roomId := r.URL.Query().Get("roomId")
-	user := &User{userId, userName}
+	// userId := r.URL.Query().Get("userId")
+	// userName := r.URL.Query().Get("userName")
+	// roomId := r.URL.Query().Get("roomId")
+	// user := &User{userId, userName}
 
-	result := joinRoomById(user, roomId)
+	userJoinRoom := &UserJoinRoom{}
+	err := json.NewDecoder(r.Body).Decode(userJoinRoom)
+	if err != nil {
+		fmt.Fprintln(w, "join room fail!!")
+		return
+	}
+	result := joinRoomById(&User{userJoinRoom.UserId, userJoinRoom.UserName}, userJoinRoom.RoomId)
 	if result {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "/room/join")
 		fmt.Fprintln(w, "join room success!!")
+		return
 	} else {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "/room/join")
 		fmt.Fprintln(w, "join room fail!!")
+		return
 	}
 
 }

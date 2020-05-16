@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gorilla/websocket"
 	uuid "github.com/satori/go.uuid"
@@ -36,6 +38,7 @@ var port = "8899"
 func main() {
 
 	http.HandleFunc("/", homeHandler)
+	http.HandleFunc("/topic/", topicHandler)
 	http.HandleFunc("/ws/draw/", drawWsHandler)
 	http.HandleFunc("/ws/room/", roomWsHandler)
 	http.HandleFunc("/room/", roomHandler)          // create, list room .etc
@@ -48,6 +51,59 @@ func main() {
 		port = v
 	}
 	log.Fatal(http.ListenAndServe(":"+port, nil))
+
+}
+
+var topics = make(map[string]*Topic)
+var roomTopic = make(map[string]string)
+
+func init() {
+	category := &Category{}
+	err := getSampleTopicFile("config.json", category)
+	if err != nil {
+		log.Println("category config not exist!!")
+		return
+	}
+	for _, category := range category.Category {
+		topic := &Topic{}
+		err = getSampleTopicFile(category+".json", topic)
+		if err != nil {
+			log.Println("category: " + category + "not exist!!")
+			return
+		}
+		topics[category] = topic
+	}
+	log.Println("topics load success!!")
+}
+
+func randomTopic() (category string, topic string) {
+	tmpCategory := ""
+	for randomCategory := range topics {
+		tmpCategory = randomCategory
+		break
+	}
+	tmpTopics := topics[tmpCategory].Topics
+	tmpTopic := ""
+	rand.Seed(time.Now().Unix())
+	tmpTopic = tmpTopics[rand.Intn(len(tmpTopics))]
+	return tmpCategory, tmpTopic
+}
+
+func topicHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.URL.Path == "/topic/list" {
+		jsonString, err := json.Marshal(topics)
+		if err != nil {
+			fmt.Fprint(w, "{}")
+			return
+		}
+		fmt.Fprint(w, string(jsonString))
+	} else if r.URL.Path == "/topic/random" {
+		category, topic := randomTopic()
+		text := `{"category":"` + category + `","` + `topic":"` + topic + `"}`
+		fmt.Fprint(w, text)
+	}
 
 }
 
@@ -134,6 +190,11 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
+type Message struct {
+	User    *User  `json:"user,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
 func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 	upgrader := &websocket.Upgrader{
 
@@ -192,25 +253,28 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 		if exist == false {
 			return
 		}
+
 		clientsMap := currentRoom.ClientsMap // get the users in this room
 		for _, client := range clientsMap {
 			if client.User.Id != clients[conn].User.Id {
-				respMsg := clients[conn].User.Name + " say::" + string(msg)
+				msgStr := string(msg)
+
+				respMsgStruct := &Message{clients[conn].User, msgStr}
 				if client.RoomConn == nil {
 					break
 				}
-				err = client.RoomConn.WriteMessage(mtype, []byte(respMsg))
-				if err != nil {
-					log.Println("write:", err)
-					break
+				currentRoomTopic, topicExist := roomTopic[roomId]
+				if topicExist && msgStr == currentRoomTopic {
+				} else {
+					respMsg, err := json.Marshal(respMsgStruct)
+
+					err = client.RoomConn.WriteMessage(mtype, respMsg)
+					if err != nil {
+						log.Println("write:", err)
+						break
+					}
 				}
 			}
-
-		}
-
-		if err != nil {
-			log.Println("write:", err)
-			break
 		}
 	}
 }
@@ -223,17 +287,24 @@ func newDrawWsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if r.URL.Path != "/" {
 		errorHandler(w, r, http.StatusNotFound)
 		return
 	}
-	fmt.Fprintln(w, "listen: "+port+" port")
-	fmt.Fprintln(w, "/ws/draw/<roomId>?userId=<userId> for ")
-	fmt.Fprintln(w, "/ws/room/<roomId>?userId=<userId> for ")
-	fmt.Fprintln(w, "/room/list for list rooms")
-	fmt.Fprintln(w, "/room/create for create a room")
-	fmt.Fprintln(w, "/room/join?userId=<userId>&roomId<roomId> for user to join a room")
-	fmt.Fprintln(w, "/room/quit?userId=<userId>&roomId<roomId> for user to quit a room")
+	fmt.Fprintln(w, "/ws/draw/${roomId}?userId=${userId} for <br>")
+	fmt.Fprintln(w, "/ws/room/${roomId}?userId=${userId} for<br>")
+	fmt.Fprintln(w, "/room/list for list rooms<br>")
+	fmt.Fprintln(w, "/room/create for create a room<br>")
+	fmt.Fprintln(w, "/room/join?userId=${userId}&roomId${roomId} for user to join a room<br>")
+	fmt.Fprintln(w, "/room/quit?userId=${userId}&roomId${roomId} for user to quit a room<br>")
+	for topicCategory, topic := range topics {
+		text := "Topic Category: " + topicCategory
+		jsonString, _ := json.Marshal(topic)
+		fmt.Fprintln(w, text)
+		fmt.Fprintln(w, string(jsonString))
+		println(string(jsonString) + "<br>")
+	}
 }
 
 func errorHandler(w http.ResponseWriter, r *http.Request, status int) {
@@ -244,7 +315,7 @@ func errorHandler(w http.ResponseWriter, r *http.Request, status int) {
 }
 
 func roomHandler(w http.ResponseWriter, r *http.Request) {
-
+	w.Header().Set("Content-Type", "application/json")
 	if r.URL.Path == "/room/list" {
 		roomListHandler(w, r)
 		return
@@ -372,4 +443,27 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "]")
 	}
 
+}
+
+type Category struct {
+	Category []string `json:"category,omitempty"`
+}
+
+type Topic struct {
+	Topics []string `json:"topics,omitempty"`
+}
+
+func getSampleTopicFile(fileName string, v interface{}) error {
+	file, err := os.Open("sample/topic/" + fileName)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	defer file.Close()
+	err = json.NewDecoder(file).Decode(v)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	return nil
 }

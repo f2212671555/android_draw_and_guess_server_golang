@@ -22,9 +22,10 @@ type Client struct {
 }
 
 type Room struct {
-	Id         string             `json:"roomId,omitempty"`
-	Name       string             `json:"roomName,omitempty"`
-	ClientsMap map[string]*Client `json:"usersMap,omitempty"`
+	Id           string             `json:"roomId,omitempty"`
+	Name         string             `json:"roomName,omitempty"`
+	ClientsMap   map[string]*Client `json:"usersMap,omitempty"`
+	RoomJoinLock bool               `json:"-,omitempty"`
 }
 
 type User struct {
@@ -120,8 +121,7 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userId := r.URL.Query().Get("userId")
-	userName := r.URL.Query().Get("userName")
-	if userId == "" || userName == "" {
+	if userId == "" {
 		return
 	}
 
@@ -137,7 +137,7 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 	roomsMap[roomId].ClientsMap[userId].DrawConn = conn
 	clients[conn] = new(Client)
 	clients[conn].RoomId = roomId
-	clients[conn].User = &User{userId, userName}
+	clients[conn].User = &User{userId, roomsMap[roomId].ClientsMap[userId].User.Name}
 	clients[conn].DrawConn = conn
 
 	if err != nil {
@@ -199,8 +199,7 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userId := r.URL.Query().Get("userId")
-	userName := r.URL.Query().Get("userName")
-	if userId == "" || userName == "" {
+	if userId == "" {
 		return
 	}
 
@@ -216,7 +215,7 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 	roomsMap[roomId].ClientsMap[userId].RoomConn = conn
 	clients[conn] = new(Client)
 	clients[conn].RoomId = roomId
-	clients[conn].User = &User{userId, userName}
+	clients[conn].User = &User{userId, roomsMap[roomId].ClientsMap[userId].User.Name}
 	clients[conn].RoomConn = conn
 
 	if err != nil {
@@ -274,7 +273,7 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 func newDrawWsHandler(w http.ResponseWriter, r *http.Request) {
 	roomId := generateRoomId()
 	println(roomId)
-	roomsMap[roomId] = &Room{roomId, "test", make(map[string]*Client)}
+	roomsMap[roomId] = &Room{roomId, "test", make(map[string]*Client), false}
 	fmt.Fprint(w, roomId)
 }
 
@@ -326,12 +325,26 @@ func roomHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type TopicDetail struct {
+	Category string `json:"category,omitempty"`
+	Topic    string `json:"topic,omitempty"`
+}
+
 func roomStartGameHandler(w http.ResponseWriter, r *http.Request) {
 	category, topic := randomTopic()
-	text := `{"category":"` + category + `","` + `topic":"` + topic + `"}`
+	topicDetail := &TopicDetail{category, topic}
 	roomId := r.URL.Query().Get("roomId")
-	roomTopic[roomId] = topic
-	fmt.Fprint(w, text)
+	_, roomExist := roomsMap[roomId]
+	if roomId == "" || !roomExist {
+		fmt.Fprint(w, http.StatusBadRequest)
+	} else {
+		jsonBytes, err := json.Marshal(topicDetail)
+		if err != nil {
+			fmt.Fprint(w, http.StatusBadRequest)
+		}
+		roomTopic[roomId] = topic
+		fmt.Fprint(w, string(jsonBytes))
+	}
 }
 
 func roomListHandler(w http.ResponseWriter, r *http.Request) {
@@ -355,16 +368,23 @@ func roomCreateHandler(w http.ResponseWriter, r *http.Request) {
 	roomTmp := &Room{}
 	err := json.NewDecoder(r.Body).Decode(roomTmp)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		fmt.Fprintln(w, http.StatusBadRequest)
 		return
 	}
 	roomName := roomTmp.Name
+	if roomName == "" {
+		fmt.Fprintln(w, http.StatusBadRequest)
+		return
+	}
 	roomId := generateRoomId()
-	room := &Room{roomId, roomName, make(map[string]*Client)}
+	room := &Room{roomId, roomName, make(map[string]*Client), false}
+	jsonBytes, err := json.Marshal(room)
+	if err != nil {
+		fmt.Fprintln(w, http.StatusBadRequest)
+		return
+	}
 	roomsMap[roomId] = room
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, "/room/create")
-	fmt.Fprintln(w, roomId)
+	fmt.Fprintln(w, string(jsonBytes))
 }
 
 type UserJoinRoom struct {
@@ -375,52 +395,67 @@ type UserJoinRoom struct {
 
 func roomJoinHandler(w http.ResponseWriter, r *http.Request) {
 
-	// userId := r.URL.Query().Get("userId")
-	// userName := r.URL.Query().Get("userName")
-	// roomId := r.URL.Query().Get("roomId")
-	// user := &User{userId, userName}
-
 	userJoinRoom := &UserJoinRoom{}
 	err := json.NewDecoder(r.Body).Decode(userJoinRoom)
 	if err != nil {
-		fmt.Fprintln(w, "join room fail!!")
+		fmt.Fprintln(w, http.StatusBadRequest)
 		return
 	}
-	result := joinRoomById(&User{userJoinRoom.UserId, userJoinRoom.UserName}, userJoinRoom.RoomId)
+	userJoinRoom.UserId = generateUserId()
+	tmpUser := &User{userJoinRoom.UserId, userJoinRoom.UserName}
+	result := joinRoomById(userJoinRoom.RoomId)
 	if result {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "join room success!!")
+		jsonBytes, err := json.Marshal(userJoinRoom)
+		if err != nil {
+			fmt.Fprintln(w, http.StatusBadRequest)
+			return
+		}
+		roomsMap[userJoinRoom.RoomId].ClientsMap[tmpUser.Id] = &Client{userJoinRoom.RoomId, tmpUser, nil, nil}
+		fmt.Fprintln(w, string(jsonBytes))
 		return
 	} else {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "join room fail!!")
+		fmt.Fprintln(w, http.StatusBadRequest)
 		return
 	}
 
 }
 func roomQuitHandler(w http.ResponseWriter, r *http.Request) {
 	userId := r.URL.Query().Get("userId")
+	if userId == "" {
+		fmt.Fprintln(w, http.StatusBadRequest)
+		return
+	}
 	roomId := r.URL.Query().Get("roomId")
-	quitRoomById(userId, roomId)
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, "/room/quit")
+	result := quitRoomById(userId, roomId)
+	if result {
+		delete(roomsMap[roomId].ClientsMap, userId)
+		fmt.Fprintln(w, http.StatusOK)
+		return
+	} else {
+		fmt.Fprintln(w, http.StatusBadRequest)
+		return
+	}
+
 }
 
-func joinRoomById(user *User, roomId string) bool {
-	room, roomErr := roomsMap[roomId]
-	if roomErr == false {
+func joinRoomById(roomId string) bool {
+	room, roomExist := roomsMap[roomId]
+	if !roomExist || room.RoomJoinLock {
 		return false
 	}
-	_, userErr := room.ClientsMap[user.Id]
-	if userErr == true {
-		return false
-	}
-	room.ClientsMap[user.Id] = &Client{roomId, user, nil, nil}
 	return true
 }
 
-func quitRoomById(userID string, roomId string) {
-	delete(roomsMap[roomId].ClientsMap, userID)
+func quitRoomById(userId string, roomId string) bool {
+	room, roomExist := roomsMap[roomId]
+	if roomExist == false {
+		return false
+	}
+	_, usertExist := room.ClientsMap[userId]
+	if usertExist == false {
+		return false
+	}
+	return true
 }
 
 func generateUserId() string {

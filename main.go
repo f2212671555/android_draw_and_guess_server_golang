@@ -22,15 +22,17 @@ type Client struct {
 }
 
 type Room struct {
-	Id           string             `json:"roomId,omitempty"`
-	Name         string             `json:"roomName,omitempty"`
-	ClientsMap   map[string]*Client `json:"usersMap,omitempty"`
-	RoomJoinLock bool               `json:"-,omitempty"`
+	Id               string             `json:"roomId,omitempty"`
+	Name             string             `json:"roomName,omitempty"`
+	ClientsMap       map[string]*Client `json:"usersMap,omitempty"`
+	RoomJoinLock     bool               `json:"-"`
+	CurrentDrawOrder int                `json:"-"`
 }
 
 type User struct {
-	Id   string `json:"userId,omitempty"`
-	Name string `json:"userName,omitempty"`
+	Id        string `json:"userId,omitempty"`
+	Name      string `json:"userName,omitempty"`
+	DrawOrder int    `json:"-"`
 }
 
 var clients = make(map[*websocket.Conn]*Client)
@@ -126,7 +128,7 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	currentClientsMap := currentRoom.ClientsMap
-	_, userErr := currentClientsMap[userId]
+	client, userErr := currentClientsMap[userId]
 	if userErr == false {
 		return
 	}
@@ -137,7 +139,7 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 	roomsMap[roomId].ClientsMap[userId].DrawConn = conn
 	clients[conn] = new(Client)
 	clients[conn].RoomId = roomId
-	clients[conn].User = &User{userId, roomsMap[roomId].ClientsMap[userId].User.Name}
+	clients[conn].User = &User{client.User.Id, client.User.Name, client.User.DrawOrder}
 	clients[conn].DrawConn = conn
 
 	if err != nil {
@@ -204,7 +206,7 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	currentClientsMap := currentRoom.ClientsMap
-	_, userErr := currentClientsMap[userId]
+	client, userErr := currentClientsMap[userId]
 	if userErr == false {
 		return
 	}
@@ -215,7 +217,7 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 	roomsMap[roomId].ClientsMap[userId].RoomConn = conn
 	clients[conn] = new(Client)
 	clients[conn].RoomId = roomId
-	clients[conn].User = &User{userId, roomsMap[roomId].ClientsMap[userId].User.Name}
+	clients[conn].User = &User{client.User.Id, client.User.Name, client.User.DrawOrder}
 	clients[conn].RoomConn = conn
 
 	if err != nil {
@@ -273,7 +275,7 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 func newDrawWsHandler(w http.ResponseWriter, r *http.Request) {
 	roomId := generateRoomId()
 	println(roomId)
-	roomsMap[roomId] = &Room{roomId, "test", make(map[string]*Client), false}
+	roomsMap[roomId] = &Room{roomId, "test", make(map[string]*Client), false, 0}
 	fmt.Fprint(w, roomId)
 }
 
@@ -310,6 +312,9 @@ func roomHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/room/list" {
 		roomListHandler(w, r)
 		return
+	} else if r.URL.Path == "/room/users" {
+		roomUsersHandler(w, r)
+		return
 	} else if r.URL.Path == "/room/create" {
 		roomCreateHandler(w, r)
 		return
@@ -325,19 +330,35 @@ func roomHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func roomUsersHandler(w http.ResponseWriter, r *http.Request) {
+	roomId := r.URL.Query().Get("roomId")
+	room, roomExist := roomsMap[roomId]
+	if roomId == "" || !roomExist {
+		fmt.Fprint(w, http.StatusBadRequest)
+	} else {
+		jsonBytes, err := json.Marshal(room)
+		if err != nil {
+			fmt.Fprint(w, http.StatusBadRequest)
+		}
+		fmt.Fprint(w, string(jsonBytes))
+	}
+}
+
 type TopicDetail struct {
 	Category string `json:"category,omitempty"`
 	Topic    string `json:"topic,omitempty"`
+	UserId   string `json:"userId,omitempty"`
 }
 
 func roomStartGameHandler(w http.ResponseWriter, r *http.Request) {
 	category, topic := randomTopic()
-	topicDetail := &TopicDetail{category, topic}
 	roomId := r.URL.Query().Get("roomId")
-	_, roomExist := roomsMap[roomId]
+	room, roomExist := roomsMap[roomId]
 	if roomId == "" || !roomExist {
 		fmt.Fprint(w, http.StatusBadRequest)
 	} else {
+		userId := userToDrawDispatcher(room)
+		topicDetail := &TopicDetail{category, topic, userId}
 		jsonBytes, err := json.Marshal(topicDetail)
 		if err != nil {
 			fmt.Fprint(w, http.StatusBadRequest)
@@ -346,7 +367,19 @@ func roomStartGameHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, string(jsonBytes))
 	}
 }
+func userToDrawDispatcher(room *Room) string {
 
+	targetUserId := ""
+	clientsMap := room.ClientsMap
+	for _, client := range clientsMap {
+		if client.User.DrawOrder == room.CurrentDrawOrder {
+			targetUserId = client.User.Id
+		}
+	}
+	room.CurrentDrawOrder += 1
+	room.CurrentDrawOrder %= len(clientsMap)
+	return targetUserId
+}
 func roomListHandler(w http.ResponseWriter, r *http.Request) {
 
 	rooms := make([]Room, 0, len(roomsMap))
@@ -377,7 +410,7 @@ func roomCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	roomId := generateRoomId()
-	room := &Room{roomId, roomName, make(map[string]*Client), false}
+	room := &Room{roomId, roomName, make(map[string]*Client), false, 1}
 	jsonBytes, err := json.Marshal(room)
 	if err != nil {
 		fmt.Fprintln(w, http.StatusBadRequest)
@@ -402,7 +435,6 @@ func roomJoinHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userJoinRoom.UserId = generateUserId()
-	tmpUser := &User{userJoinRoom.UserId, userJoinRoom.UserName}
 	result := joinRoomById(userJoinRoom.RoomId)
 	if result {
 		jsonBytes, err := json.Marshal(userJoinRoom)
@@ -410,6 +442,7 @@ func roomJoinHandler(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintln(w, http.StatusBadRequest)
 			return
 		}
+		tmpUser := &User{userJoinRoom.UserId, userJoinRoom.UserName, len(roomsMap[userJoinRoom.RoomId].ClientsMap) + 1}
 		roomsMap[userJoinRoom.RoomId].ClientsMap[tmpUser.Id] = &Client{userJoinRoom.RoomId, tmpUser, nil, nil}
 		fmt.Fprintln(w, string(jsonBytes))
 		return

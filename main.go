@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -285,19 +286,27 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		errorHandler(w, r, http.StatusNotFound)
 		return
 	}
-	fmt.Fprintln(w, "/ws/draw/${roomId}?userId=${userId} for <br>")
-	fmt.Fprintln(w, "/ws/room/${roomId}?userId=${userId} for<br>")
-	fmt.Fprintln(w, "/room/list for list rooms<br>")
-	fmt.Fprintln(w, "/room/create for create a room<br>")
-	fmt.Fprintln(w, "/room/join?userId=${userId}&roomId${roomId} for user to join a room<br>")
-	fmt.Fprintln(w, "/room/quit?userId=${userId}&roomId${roomId} for user to quit a room<br>")
-	for topicCategory, topic := range topics {
-		text := "Topic Category: " + topicCategory
-		jsonString, _ := json.Marshal(topic)
-		fmt.Fprintln(w, text)
-		fmt.Fprintln(w, string(jsonString))
-		println(string(jsonString) + "<br>")
+
+	t, err := template.ParseFiles("./template/html/home.html")
+	if t != nil {
+		t.Execute(w, nil)
+	} else {
+		println(err.Error())
 	}
+
+	// fmt.Fprintln(w, "/ws/draw/${roomId}?userId=${userId} for <br>")
+	// fmt.Fprintln(w, "/ws/room/${roomId}?userId=${userId} for<br>")
+	// fmt.Fprintln(w, "/room/list for list rooms<br>")
+	// fmt.Fprintln(w, "/room/create for create a room<br>")
+	// fmt.Fprintln(w, "/room/join?userId=${userId}&roomId${roomId} for user to join a room<br>")
+	// fmt.Fprintln(w, "/room/quit?userId=${userId}&roomId${roomId} for user to quit a room<br>")
+	// for topicCategory, topic := range topics {
+	// 	text := "Topic Category: " + topicCategory
+	// 	jsonString, _ := json.Marshal(topic)
+	// 	fmt.Fprintln(w, text)
+	// 	fmt.Fprintln(w, string(jsonString))
+	// 	println(string(jsonString) + "<br>")
+	// }
 }
 
 func errorHandler(w http.ResponseWriter, r *http.Request, status int) {

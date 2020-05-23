@@ -337,7 +337,11 @@ func roomHandler(w http.ResponseWriter, r *http.Request) {
 	} else if r.URL.Path == "/room/startDraw" {
 		roomStartGameHandler(w, r)
 		return
+	} else if r.URL.Path == "/room/topic" {
+		roomTopicHandler(w, r)
+		return
 	}
+
 }
 
 func roomUsersHandler(w http.ResponseWriter, r *http.Request) {

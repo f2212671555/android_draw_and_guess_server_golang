@@ -59,7 +59,7 @@ func main() {
 }
 
 var topics = make(map[string]*Topic)
-var roomTopic = make(map[string]string)
+var roomTopic = make(map[string]*TopicDetail)
 
 func init() {
 	category := &Category{}
@@ -257,8 +257,9 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 				if client.RoomConn == nil {
 					break
 				}
-				currentRoomTopic, topicExist := roomTopic[roomId]
-				if topicExist && msgStr == currentRoomTopic {
+				currentRoomTopicDetail, topicExist := roomTopic[roomId]
+				currentTopic := currentRoomTopicDetail.Topic
+				if topicExist && msgStr == currentTopic {
 				} else {
 					respMsg, err := json.Marshal(respMsgStruct)
 
@@ -372,7 +373,7 @@ func roomStartGameHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			fmt.Fprint(w, http.StatusBadRequest)
 		}
-		roomTopic[roomId] = topic
+		roomTopic[roomId] = topicDetail
 		fmt.Fprint(w, string(jsonBytes))
 	}
 }
@@ -389,18 +390,31 @@ func userToDrawDispatcher(room *Room) string {
 	room.CurrentDrawOrder %= len(clientsMap)
 	return targetUserId
 }
+
+func roomTopicHandler(w http.ResponseWriter, r *http.Request) {
+	roomId := r.URL.Query().Get("roomId")
+	topicDetail := roomTopic[roomId]
+	jsonBytes, err := json.Marshal(topicDetail)
+	if err != nil {
+		println(err)
+		return
+	}
+	fmt.Fprint(w, string(jsonBytes))
+}
+
 func roomListHandler(w http.ResponseWriter, r *http.Request) {
 
 	rooms := make([]Room, 0, len(roomsMap))
 	for _, room := range roomsMap {
 		rooms = append(rooms, *room)
 	}
-	jsonString, err := json.Marshal(rooms)
+	jsonBytes, err := json.Marshal(rooms)
 	if err != nil {
 		println(err)
+		return
 	}
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, string(jsonString))
+	fmt.Fprint(w, string(jsonBytes))
 }
 
 var roomsMap = make(map[string]*Room)

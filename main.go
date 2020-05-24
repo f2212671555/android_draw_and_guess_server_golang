@@ -188,6 +188,7 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 type Message struct {
 	User    *User  `json:"user,omitempty"`
 	Message string `json:"message,omitempty"`
+	Result  bool   `json:"result,omitempty"`
 }
 
 func roomWsHandler(w http.ResponseWriter, r *http.Request) {
@@ -207,8 +208,8 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	currentClientsMap := currentRoom.ClientsMap
-	client, userErr := currentClientsMap[userId]
-	if userErr == false {
+	client, userExist := currentClientsMap[userId]
+	if userExist == false {
 		return
 	}
 
@@ -250,26 +251,30 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 
 		clientsMap := currentRoom.ClientsMap // get the users in this room
 		for _, client := range clientsMap {
-			if client.User.Id != clients[conn].User.Id {
-				msgStr := string(msg)
+			// if client.User.Id != clients[conn].User.Id {
+			msgStr := string(msg)
 
-				respMsgStruct := &Message{clients[conn].User, msgStr}
-				if client.RoomConn == nil {
-					break
-				}
-				currentRoomTopicDetail, topicExist := roomTopic[roomId]
+			respMsgStruct := &Message{clients[conn].User, msgStr, false}
+			if client.RoomConn == nil {
+				break
+			}
+			currentRoomTopicDetail, topicExist := roomTopic[roomId]
+			if topicExist {
 				currentTopic := currentRoomTopicDetail.Topic
-				if topicExist && msgStr == currentTopic {
-				} else {
-					respMsg, err := json.Marshal(respMsgStruct)
-
-					err = client.RoomConn.WriteMessage(mtype, respMsg)
-					if err != nil {
-						log.Println("write:", err)
-						break
-					}
+				if currentTopic == msgStr {
+					respMsgStruct.Result = true
 				}
 			}
+			//  else {
+			respMsg, err := json.Marshal(respMsgStruct)
+
+			err = client.RoomConn.WriteMessage(mtype, respMsg)
+			if err != nil {
+				log.Println("write:", err)
+				break
+			}
+			// }
+			// }
 		}
 	}
 }

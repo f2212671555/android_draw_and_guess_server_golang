@@ -186,9 +186,10 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type Message struct {
+	Type    string `json:"type,omitempty"`
 	User    *User  `json:"user,omitempty"`
 	Message string `json:"message,omitempty"`
-	Result  bool   `json:"result,omitempty"`
+	Result  *bool  `json:"result,omitempty"`
 }
 
 func roomWsHandler(w http.ResponseWriter, r *http.Request) {
@@ -215,7 +216,13 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	log.Println("connect !!")
-	conn.WriteMessage(1, []byte("HI"))
+
+	welcomeMessage := &Message{"", client.User, "HI", nil}
+	respMsg, err := json.Marshal(welcomeMessage)
+	if err != nil {
+		return
+	}
+	conn.WriteMessage(1, respMsg)
 	roomsMap[roomId].ClientsMap[userId].RoomConn = conn
 	clients[conn] = new(Client)
 	clients[conn].RoomId = roomId
@@ -254,18 +261,19 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 			// if client.User.Id != clients[conn].User.Id {
 			msgStr := string(msg)
 
-			respMsgStruct := &Message{clients[conn].User, msgStr, false}
 			if client.RoomConn == nil {
 				break
 			}
+			result := false
 			currentRoomTopicDetail, topicExist := roomTopic[roomId]
 			if topicExist {
 				currentTopic := currentRoomTopicDetail.Topic
 				if currentTopic == msgStr {
-					respMsgStruct.Result = true
+					result = true
 				}
 			}
 			//  else {
+			respMsgStruct := &Message{"", clients[conn].User, msgStr, &result}
 			respMsg, err := json.Marshal(respMsgStruct)
 
 			err = client.RoomConn.WriteMessage(mtype, respMsg)

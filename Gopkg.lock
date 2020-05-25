@@ -10,6 +10,14 @@
   version = "v1.4.2"
 
 [[projects]]
+  branch = "master"
+  digest = "1:618162a6fd7ef94485d136d1bdd062c49eed478144967eb050c9e3dbe9e4f26b"
+  name = "github.com/orcaman/concurrent-map"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "8c72a8bb44f6cfcff2abae8ebcbaaaf883331363"
+
+[[projects]]
   digest = "1:274f67cb6fed9588ea2521ecdac05a6d62a8c51c074c1fccc6a49a40ba80e925"
   name = "github.com/satori/go.uuid"
   packages = ["."]
@@ -22,6 +30,7 @@
   analyzer-version = 1
   input-imports = [
     "github.com/gorilla/websocket",
+    "github.com/orcaman/concurrent-map",
     "github.com/satori/go.uuid",
   ]
   solver-name = "gps-cdcl"

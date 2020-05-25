@@ -270,7 +270,7 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 			msgStr := string(msg)
 			result := false
 
-			if currentRoom.TopicDetail == nil {
+			if currentRoom.TopicDetail != nil {
 				currentTopic := currentRoom.TopicDetail.Topic
 				if currentTopic == msgStr {
 					result = true

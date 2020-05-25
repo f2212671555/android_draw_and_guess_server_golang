@@ -578,6 +578,9 @@ func roomQuitHandler(w http.ResponseWriter, r *http.Request) {
 		userJoinRoomBean.UserName = user.UserName
 		userJoinRoomBean.Result = &result
 		room.Users.Remove(userId)
+		if room.Users.Count() == 0 {
+			roomsMap.Remove(roomId)
+		}
 	}
 
 	jsonBytes, err := json.Marshal(userJoinRoomBean)

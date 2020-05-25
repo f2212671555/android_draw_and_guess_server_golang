@@ -130,16 +130,20 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 	if currentUserId == "" {                                   // check userId empty
 		return
 	}
-	_, roomExist := roomsMap[currentRoomId] // check room exist , get room
+	currentRoom, roomExist := roomsMap[currentRoomId] // check room exist , get room
 	if roomExist == false {
 		return
 	}
-
+	currentUser, userExist := currentRoom.Users[currentUserId] // check user is login
+	if userExist == false {
+		return
+	}
 	upgrader := &websocket.Upgrader{
 
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
 	conn, err := upgrader.Upgrade(w, r, nil) // get *conn
+	currentUser.DrawConn = conn
 	log.Println("connect !!")
 
 	if err != nil {
@@ -156,6 +160,7 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		log.Println("disconnect !!")
+		currentUser.DrawConn = nil
 		conn.Close()
 	}()
 
@@ -173,18 +178,18 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		roomUsers := currentRoom.Users // get the users in this room
-		for userId, user := range roomUsers {
-			if userId != currentUserId { // do not send msg to (s)hseself
-				if user.DrawConn == nil {
-					log.Println("user DrawConn is nil!!")
-					break
-				}
-				err = user.DrawConn.WriteMessage(mtype, msg)
-				if err != nil {
-					log.Println("write:", err)
-					break
-				}
+		for _, user := range roomUsers {
+			// if userId != currentUserId { // do not send msg to (s)hseself
+			if user.DrawConn == nil {
+				log.Println("user DrawConn is nil!!")
+				break
 			}
+			err = user.DrawConn.WriteMessage(mtype, msg)
+			if err != nil {
+				log.Println("write:", err)
+				break
+			}
+			// }
 		}
 	}
 }
@@ -196,16 +201,20 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 	if currentUserId == "" {
 		return
 	}
-	_, roomExist := roomsMap[currentRoomId]
+	currentRoom, roomExist := roomsMap[currentRoomId]
 	if roomExist == false {
 		return
 	}
-
+	currentUser, userExist := currentRoom.Users[currentUserId] // check user is login
+	if userExist == false {
+		return
+	}
 	upgrader := &websocket.Upgrader{
 
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
-	conn, err := upgrader.Upgrade(w, r, nil)
+	conn, err := upgrader.Upgrade(w, r, nil) // get *conn
+	currentUser.RoomConn = conn
 	log.Println("connect !!")
 
 	// welcomeMessage := &Message{"", client.User, "HI", nil}
@@ -221,6 +230,7 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() {
 		log.Println("disconnect !!")
+		currentUser.RoomConn = nil
 		conn.Close()
 	}()
 

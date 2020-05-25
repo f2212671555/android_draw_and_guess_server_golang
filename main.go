@@ -12,15 +12,16 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	cmap "github.com/orcaman/concurrent-map"
 	uuid "github.com/satori/go.uuid"
 )
 
 type Room struct {
-	RoomId           string           `json:"roomId,omitempty"`
-	RoomName         string           `json:"roomName,omitempty"`
-	Users            map[string]*User `json:"users,omitempty"`
-	CurrentDrawOrder int              `json:"-"`
-	TopicDetail      *TopicDetail     `json:"topicDetail,omitempty"`
+	RoomId           string             `json:"roomId,omitempty"`
+	RoomName         string             `json:"roomName,omitempty"`
+	Users            cmap.ConcurrentMap `json:"users,omitempty"`
+	CurrentDrawOrder int                `json:"-"`
+	TopicDetail      *TopicDetail       `json:"topicDetail,omitempty"`
 }
 
 type User struct {
@@ -66,12 +67,28 @@ type UserJoinRoomBean struct {
 	Result   *bool  `json:"result,omitempty"`
 }
 
-var topics = make(map[string]*Topic)  // store topics
-var roomsMap = make(map[string]*Room) // store rooms with roomId
+type Category struct {
+	Category []string `json:"category,omitempty"`
+}
+
+type Topic struct {
+	Topics []string `json:"topics,omitempty"`
+}
+
+var topics cmap.ConcurrentMap   // store topics
+var roomsMap cmap.ConcurrentMap // store rooms with roomId
+
+func initSafeMap() {
+	topics = cmap.New()
+	roomsMap = cmap.New()
+}
+
 var port = "8899"
 
 func main() {
 
+	initSafeMap()
+	loading()
 	http.HandleFunc("/", homeHandler)
 	http.HandleFunc("/topic/", topicHandler)
 	http.HandleFunc("/ws/draw/", drawWsHandler)
@@ -87,7 +104,7 @@ func main() {
 
 }
 
-func init() {
+func loading() {
 	category := &Category{}
 	err := getSampleTopicFile("config.json", category)
 	if err != nil {
@@ -101,21 +118,26 @@ func init() {
 			log.Println("category: " + category + "not exist!!")
 			return
 		}
-		topics[category] = topic
+		topics.Set(category, topic)
 	}
 	log.Println("topics load success!!")
 }
 
 func randomTopic() (category string, topic string) {
 	tmpCategory := ""
-	for randomCategory := range topics {
-		tmpCategory = randomCategory
+	tmpTopic := ""
+	for item := range topics.Iter() { // get category
+		tmpCategory = item.Key
 		break
 	}
-	tmpTopics := topics[tmpCategory].Topics
-	tmpTopic := ""
-	rand.Seed(time.Now().Unix())
-	tmpTopic = tmpTopics[rand.Intn(len(tmpTopics))]
+
+	topicsInterface, exist := topics.Get(tmpCategory)
+	if exist {
+		topic := topicsInterface.(*Topic)
+		rand.Seed(time.Now().Unix())
+		tmpTopic = topic.Topics[rand.Intn(len(topic.Topics))]
+	}
+
 	return tmpCategory, tmpTopic
 }
 
@@ -125,7 +147,6 @@ func topicHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/topic/list" {
 		jsonString, err := json.Marshal(topics)
 		if err != nil {
-			fmt.Fprint(w, "{}")
 			return
 		}
 		fmt.Fprint(w, string(jsonString))
@@ -144,14 +165,17 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 	if currentUserId == "" {                                   // check userId empty
 		return
 	}
-	currentRoom, roomExist := roomsMap[currentRoomId] // check room exist , get room
+
+	currentRoomInterface, roomExist := roomsMap.Get(currentRoomId) // check room exist , get room
 	if roomExist == false {
 		return
 	}
-	currentUser, userExist := currentRoom.Users[currentUserId] // check user is login
+	currentRoom := currentRoomInterface.(*Room)                             // interface{} to room
+	currentUserInterface, userExist := currentRoom.Users.Get(currentUserId) // check user is login
 	if userExist == false {
 		return
 	}
+	currentUser := currentUserInterface.(*User)
 	upgrader := &websocket.Upgrader{
 
 		CheckOrigin: func(r *http.Request) bool { return true },
@@ -186,14 +210,16 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("receive: %s\n", msg)
 
-		currentRoom, exist := roomsMap[currentRoomId] // get current room
+		currentRoomInterface, exist := roomsMap.Get(currentRoomId) // get current room
 		if exist == false {
 			return
 		}
-
+		currentRoom := currentRoomInterface.(*Room)
 		roomUsers := currentRoom.Users // get the users in this room
-		for _, user := range roomUsers {
+		for item := range roomUsers.Iter() {
 			// if userId != currentUserId { // do not send msg to (s)hseself
+			userInterface := item.Val
+			user := userInterface.(*User)
 			if user.DrawConn == nil {
 				log.Println("user DrawConn is nil!!")
 				break
@@ -215,14 +241,17 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 	if currentUserId == "" {
 		return
 	}
-	currentRoom, roomExist := roomsMap[currentRoomId]
+
+	currentRoomInterface, roomExist := roomsMap.Get(currentRoomId)
 	if roomExist == false {
 		return
 	}
-	currentUser, userExist := currentRoom.Users[currentUserId] // check user is login
+	currentRoom := currentRoomInterface.(*Room)
+	currentUserInterface, userExist := currentRoom.Users.Get(currentUserId) // check user is login
 	if userExist == false {
 		return
 	}
+	currentUser := currentUserInterface.(*User)
 	upgrader := &websocket.Upgrader{
 
 		CheckOrigin: func(r *http.Request) bool { return true },
@@ -256,14 +285,16 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("receive: %s\n", msg)
 
-		currentRoom, exist := roomsMap[currentRoomId]
+		currentRoomInterface, exist := roomsMap.Get(currentRoomId)
 		if exist == false {
 			return
 		}
-
+		currentRoom := currentRoomInterface.(*Room)
 		roomUsers := currentRoom.Users // get the users in this room
-		for _, user := range roomUsers {
+		for item := range roomUsers.Iter() {
 			// if userId != currentUserId { // do not send msg to (s)hseself
+			userInterface := item.Val
+			user := userInterface.(*User)
 			if user.RoomConn == nil {
 				break
 			}
@@ -341,10 +372,11 @@ func roomHandler(w http.ResponseWriter, r *http.Request) {
 func roomUsersHandler(w http.ResponseWriter, r *http.Request) {
 	roomId := r.URL.Query().Get("roomId")
 	result := true
-	room, roomExist := roomsMap[roomId]
+	roomInterface, roomExist := roomsMap.Get(roomId)
 	if roomId == "" || !roomExist {
 		result = false
 	}
+	room := roomInterface.(*Room)
 	roomBean := RoomBean{"", "", nil, &result}
 	if result {
 		roomBean.RoomId = room.RoomId
@@ -361,7 +393,8 @@ func roomUsersHandler(w http.ResponseWriter, r *http.Request) {
 func roomStartGameHandler(w http.ResponseWriter, r *http.Request) {
 	category, topic := randomTopic()
 	roomId := r.URL.Query().Get("roomId")
-	room, roomExist := roomsMap[roomId]
+	roomInterface, roomExist := roomsMap.Get(roomId)
+	room := roomInterface.(*Room)
 	result := true
 	if roomId == "" || !roomExist {
 		result = false
@@ -389,23 +422,26 @@ func userToDrawDispatcher(room *Room) string {
 
 	targetUserId := ""
 	roomUsers := room.Users
-	for _, user := range roomUsers {
+	for item := range roomUsers.Iter() {
+		userInterface := item.Val
+		user := userInterface.(*User)
 		if user.DrawOrder == room.CurrentDrawOrder {
 			targetUserId = user.UserId
 		}
 	}
 	room.CurrentDrawOrder += 1
-	room.CurrentDrawOrder %= len(roomUsers)
+	room.CurrentDrawOrder %= roomUsers.Count()
 	return targetUserId
 }
 
 func roomTopicHandler(w http.ResponseWriter, r *http.Request) {
 	roomId := r.URL.Query().Get("roomId")
 	result := true
-	room, roomExist := roomsMap[roomId]
+	roomInterface, roomExist := roomsMap.Get(roomId)
 	if roomExist == false {
 		result = false
 	}
+	room := roomInterface.(*Room)
 	topicDetail := TopicDetail{"", "", "", &result}
 	if result {
 		if room.TopicDetail != nil {
@@ -425,11 +461,14 @@ func roomTopicHandler(w http.ResponseWriter, r *http.Request) {
 
 func roomListHandler(w http.ResponseWriter, r *http.Request) {
 
-	roomBeans := make([]RoomBean, 0, len(roomsMap))
-	for _, room := range roomsMap {
-
-		userBeans := make([]UserBean, 0, len(room.Users))
-		for _, user := range room.Users {
+	roomBeans := make([]RoomBean, 0, roomsMap.Count())
+	for item := range roomsMap.Iter() {
+		roomInterface := item.Val
+		room := roomInterface.(*Room)
+		userBeans := make([]UserBean, 0, room.Users.Count())
+		for item := range room.Users.Iter() {
+			userInterface := item.Val
+			user := userInterface.(*User)
 			userBean := UserBean{user.RoomId, user.UserId, user.UserName}
 			userBeans = append(userBeans, userBean)
 		}
@@ -464,8 +503,8 @@ func roomCreateHandler(w http.ResponseWriter, r *http.Request) {
 	if result {
 		roomId := generateRoomId()
 		respRoomBean.RoomId = roomId
-		room := &Room{roomId, roomName, make(map[string]*User), 1, nil}
-		roomsMap[roomId] = room
+		room := &Room{roomId, roomName, cmap.New(), 1, nil}
+		roomsMap.Set(roomId, room)
 	}
 
 	jsonBytes, err := json.Marshal(respRoomBean)
@@ -486,16 +525,18 @@ func roomJoinHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	result := true
 
-	room, roomExist := roomsMap[userJoinRoomBean.RoomId]
+	roomInterface, roomExist := roomsMap.Get(userJoinRoomBean.RoomId)
 	if roomExist == false {
 		result = false
 	}
+
 	userJoinRoomBean.Result = &result
 	if result {
+		room := roomInterface.(*Room)
 		userJoinRoomBean.UserId = generateUserId()
 		tmpUser := &User{userJoinRoomBean.RoomId, userJoinRoomBean.UserId,
-			userJoinRoomBean.UserName, nil, nil, len(room.Users) + 1}
-		room.Users[userJoinRoomBean.UserId] = tmpUser
+			userJoinRoomBean.UserName, nil, nil, room.Users.Count() + 1}
+		room.Users.Set(userJoinRoomBean.UserId, tmpUser)
 	}
 
 	jsonBytes, err := json.Marshal(userJoinRoomBean)
@@ -514,12 +555,13 @@ func roomQuitHandler(w http.ResponseWriter, r *http.Request) {
 		println("user id is empty!!")
 	}
 	roomId := r.URL.Query().Get("roomId")
-	room, roomExist := roomsMap[roomId]
+	roomInterface, roomExist := roomsMap.Get(roomId)
 	if roomExist == false {
 		result = false
 		println("this room is not exist!!")
 	} else {
-		_, usertExist := room.Users[userId]
+		room := roomInterface.(*Room)
+		_, usertExist := room.Users.Get(userId)
 		if usertExist == false {
 			result = false
 			println("this user is not exist!!")
@@ -528,11 +570,14 @@ func roomQuitHandler(w http.ResponseWriter, r *http.Request) {
 
 	userJoinRoomBean := &UserJoinRoomBean{"", "", "", &result}
 	if result {
+		room := roomInterface.(*Room)
 		userJoinRoomBean.RoomId = roomId
 		userJoinRoomBean.UserId = userId
-		userJoinRoomBean.UserName = room.Users[userId].UserName
+		userInterface, _ := room.Users.Get(userId) //
+		user := userInterface.(*User)
+		userJoinRoomBean.UserName = user.UserName
 		userJoinRoomBean.Result = &result
-		delete(roomsMap[roomId].Users, userId)
+		room.Users.Remove(userId)
 	}
 
 	jsonBytes, err := json.Marshal(userJoinRoomBean)
@@ -554,14 +599,6 @@ func generateRoomId() string {
 func generateUuId() string {
 	uuid := uuid.NewV4()
 	return uuid.String()
-}
-
-type Category struct {
-	Category []string `json:"category,omitempty"`
-}
-
-type Topic struct {
-	Topics []string `json:"topics,omitempty"`
 }
 
 func getSampleTopicFile(fileName string, v interface{}) error {

@@ -16,8 +16,8 @@ import (
 )
 
 type Room struct {
-	Id               string           `json:"roomId,omitempty"`
-	Name             string           `json:"roomName,omitempty"`
+	RoomId           string           `json:"roomId,omitempty"`
+	RoomName         string           `json:"roomName,omitempty"`
 	Users            map[string]*User `json:"users,omitempty"`
 	CurrentDrawOrder int              `json:"-"`
 }
@@ -44,7 +44,20 @@ type Message struct {
 	Result  *bool  `json:"result,omitempty"`
 }
 
-type UserJoinRoom struct {
+type RoomBean struct {
+	RoomId    string     `json:"roomId,omitempty"`
+	RoomName  string     `json:"roomName,omitempty"`
+	UserBeans []UserBean `json:"users,omitempty"`
+	Result    *bool      `json:"result,omitempty"`
+}
+
+type UserBean struct {
+	RoomId   string `json:"roomId,omitempty"`
+	UserId   string `json:"userId,omitempty"`
+	UserName string `json:"userName,omitempty"`
+}
+
+type UserJoinRoomBean struct {
 	UserId   string `json:"userId,omitempty"`
 	UserName string `json:"userName,omitempty"`
 	RoomId   string `json:"roomId,omitempty"`
@@ -382,94 +395,106 @@ func roomTopicHandler(w http.ResponseWriter, r *http.Request) {
 
 func roomListHandler(w http.ResponseWriter, r *http.Request) {
 
-	rooms := make([]Room, 0, len(roomsMap))
+	roomBeans := make([]RoomBean, 0, len(roomsMap))
 	for _, room := range roomsMap {
-		rooms = append(rooms, *room)
+
+		userBeans := make([]UserBean, 0, len(room.Users))
+		for _, user := range room.Users {
+			userBean := UserBean{user.RoomId, user.UserId, user.UserName}
+			userBeans = append(userBeans, userBean)
+		}
+		roomBean := RoomBean{room.RoomId, room.RoomName, userBeans, nil}
+		roomBeans = append(roomBeans, roomBean)
 	}
-	jsonBytes, err := json.Marshal(rooms)
+
+	jsonBytes, err := json.Marshal(roomBeans)
 	if err != nil {
 		println(err)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, string(jsonBytes))
 }
 
 func roomCreateHandler(w http.ResponseWriter, r *http.Request) {
 
-	roomTmp := &Room{}
-	err := json.NewDecoder(r.Body).Decode(roomTmp)
+	roomBean := &RoomBean{}
+	result := true
+	err := json.NewDecoder(r.Body).Decode(roomBean)
 	if err != nil {
-		fmt.Fprintln(w, http.StatusBadRequest)
+		println(err)
 		return
 	}
-	roomName := roomTmp.Name
+	roomName := roomBean.RoomName
 	if roomName == "" {
-		fmt.Fprintln(w, http.StatusBadRequest)
-		return
+		result = false
+		println("roomName is empty!!")
 	}
+
 	roomId := generateRoomId()
-	room := &Room{roomId, roomName, make(map[string]*User), 1}
-	jsonBytes, err := json.Marshal(room)
+	respRoomBean := &RoomBean{roomId, roomName, nil, &result}
+	jsonBytes, err := json.Marshal(respRoomBean)
 	if err != nil {
-		fmt.Fprintln(w, http.StatusBadRequest)
+		println(err)
 		return
 	}
+	room := &Room{roomId, roomName, make(map[string]*User), 1}
 	roomsMap[roomId] = room
 	fmt.Fprintln(w, string(jsonBytes))
 }
 
 func roomJoinHandler(w http.ResponseWriter, r *http.Request) {
 
-	userJoinRoom := &UserJoinRoom{}
-	err := json.NewDecoder(r.Body).Decode(userJoinRoom)
-
+	userJoinRoomBean := &UserJoinRoomBean{}
+	err := json.NewDecoder(r.Body).Decode(userJoinRoomBean)
 	if err != nil {
 		println(err)
 		return
 	}
-	result := false
-	userJoinRoom.UserId = generateUserId()
-	room, roomExist := roomsMap[userJoinRoom.RoomId] //
-	if roomExist {
-
-		jsonBytes, err := json.Marshal(userJoinRoom)
-		if err != nil {
-			println(err)
-			return
-		}
-		result = true
-		tmpUser := &User{userJoinRoom.RoomId, userJoinRoom.UserId,
-			userJoinRoom.UserName, nil, nil, len(room.Users) + 1}
-		room.Users[userJoinRoom.UserId] = tmpUser
-		userJoinRoom.Result = &result
-		fmt.Fprintln(w, string(jsonBytes))
-		return
-
+	result := true
+	userJoinRoomBean.UserId = generateUserId()
+	room, roomExist := roomsMap[userJoinRoomBean.RoomId]
+	if roomExist == false {
+		result = false
 	}
-
+	userJoinRoomBean.Result = &result
+	jsonBytes, err := json.Marshal(userJoinRoomBean)
+	if err != nil {
+		println(err)
+		return
+	}
+	tmpUser := &User{userJoinRoomBean.RoomId, userJoinRoomBean.UserId,
+		userJoinRoomBean.UserName, nil, nil, len(room.Users) + 1}
+	room.Users[userJoinRoomBean.UserId] = tmpUser
+	fmt.Fprintln(w, string(jsonBytes))
 }
+
 func roomQuitHandler(w http.ResponseWriter, r *http.Request) {
+	result := true
 	userId := r.URL.Query().Get("userId")
 	if userId == "" {
-		fmt.Fprintln(w, http.StatusBadRequest)
-		return
+		result = false
+		println("user id is empty!!")
 	}
 	roomId := r.URL.Query().Get("roomId")
 	room, roomExist := roomsMap[roomId]
 	if roomExist == false {
-		fmt.Fprintln(w, http.StatusBadRequest)
-		return
+		result = false
+		println("this room is not exist!!")
 	}
-	_, usertExist := room.Users[userId]
+	user, usertExist := room.Users[userId]
 	if usertExist == false {
-		fmt.Fprintln(w, http.StatusBadRequest)
+		result = false
+		println("this user is not exist!!")
+	}
+
+	userJoinRoomBean := &UserJoinRoomBean{userId, user.UserName, roomId, &result}
+	jsonBytes, err := json.Marshal(userJoinRoomBean)
+	if err != nil {
+		println(err)
 		return
 	}
 	delete(roomsMap[roomId].Users, userId)
-	fmt.Fprintln(w, http.StatusOK)
-	return
-
+	fmt.Fprintln(w, string(jsonBytes))
 }
 
 func generateUserId() string {

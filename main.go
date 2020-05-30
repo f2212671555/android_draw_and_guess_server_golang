@@ -94,7 +94,7 @@ func main() {
 	http.HandleFunc("/ws/draw/", drawWsHandler)
 	http.HandleFunc("/ws/room/", roomWsHandler)
 	http.HandleFunc("/room/", roomHandler) // create, list room .etc
-
+	// http.Handle("/public/", http.FileServer(http.Dir("./public/picture/")))
 	log.Println("server start at :8899")
 
 	if v := os.Getenv("PORT"); len(v) > 0 {
@@ -217,19 +217,19 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 		currentRoom := currentRoomInterface.(*Room)
 		roomUsers := currentRoom.Users // get the users in this room
 		for item := range roomUsers.Iter() {
-			// if userId != currentUserId { // do not send msg to (s)hseself
 			userInterface := item.Val
 			user := userInterface.(*User)
-			if user.DrawConn == nil {
-				log.Println("user DrawConn is nil!!")
-				break
+			if user.UserId != currentUserId { // do not send msg to (s)hseself
+				if user.DrawConn == nil {
+					log.Println("user DrawConn is nil!!")
+					break
+				}
+				err = user.DrawConn.WriteMessage(mtype, msg)
+				if err != nil {
+					log.Println("write:", err)
+					break
+				}
 			}
-			err = user.DrawConn.WriteMessage(mtype, msg)
-			if err != nil {
-				log.Println("write:", err)
-				break
-			}
-			// }
 		}
 	}
 }
@@ -292,30 +292,30 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 		currentRoom := currentRoomInterface.(*Room)
 		roomUsers := currentRoom.Users // get the users in this room
 		for item := range roomUsers.Iter() {
-			// if userId != currentUserId { // do not send msg to (s)hseself
 			userInterface := item.Val
 			user := userInterface.(*User)
-			if user.RoomConn == nil {
-				break
-			}
-			msgStr := string(msg)
-			result := false
+			if user.UserId != currentUserId { // do not send msg to (s)hseself
+				if user.RoomConn == nil {
+					break
+				}
+				msgStr := string(msg)
+				result := false
 
-			if currentRoom.TopicDetail != nil {
-				currentTopic := currentRoom.TopicDetail.Topic
-				if currentTopic == msgStr {
-					result = true
+				if currentRoom.TopicDetail != nil {
+					currentTopic := currentRoom.TopicDetail.Topic
+					if currentTopic == msgStr {
+						result = true
+					}
+				}
+
+				respMsgStruct := &Message{"", user, msgStr, &result}
+				respMsg, err := json.Marshal(respMsgStruct)
+				err = user.RoomConn.WriteMessage(mtype, respMsg)
+				if err != nil {
+					log.Println("write:", err)
+					break
 				}
 			}
-
-			respMsgStruct := &Message{"", user, msgStr, &result}
-			respMsg, err := json.Marshal(respMsgStruct)
-			err = user.RoomConn.WriteMessage(mtype, respMsg)
-			if err != nil {
-				log.Println("write:", err)
-				break
-			}
-			// }
 		}
 	}
 }

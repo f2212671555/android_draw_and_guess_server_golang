@@ -307,7 +307,6 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 						result = true
 					}
 				}
-
 				respMsgStruct := &Message{"", user, msgStr, &result}
 				respMsg, err := json.Marshal(respMsgStruct)
 				err = user.RoomConn.WriteMessage(mtype, respMsg)

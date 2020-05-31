@@ -380,6 +380,12 @@ func roomUsersHandler(w http.ResponseWriter, r *http.Request) {
 	if result {
 		roomBean.RoomId = room.RoomId
 		roomBean.RoomName = room.RoomName
+		for item := range room.Users.Iter() {
+			userInterface := item.Val
+			user := userInterface.(*User)
+			userBean := UserBean{user.RoomId, user.UserId, user.UserName}
+			roomBean.UserBeans = append(roomBean.UserBeans, userBean)
+		}
 	}
 	jsonBytes, err := json.Marshal(roomBean)
 	if err != nil {

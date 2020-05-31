@@ -312,7 +312,7 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 				} else if reqMessage.Type == "answer" { // answer question
 					if currentRoom.TopicDetail != nil {
 						currentTopic := currentRoom.TopicDetail.Topic
-						if currentTopic == msgStr {
+						if currentTopic == reqMessage.Message {
 							result = true
 						}
 					}

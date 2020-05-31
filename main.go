@@ -295,35 +295,33 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 		for item := range roomUsers.Iter() {
 			userInterface := item.Val
 			user := userInterface.(*User)
-			if user.UserId != currentUserId { // do not send msg to (s)hseself
-				if user.RoomConn == nil {
-					break
-				}
-				reqMessage := &Message{}
-				err := json.Unmarshal(msg, reqMessage)
-				if err != nil {
-					println(err)
-					break
-				}
-				result := false
-				if reqMessage.Type == "chat" { // chat room
-
-				} else if reqMessage.Type == "answer" { // answer question
-					if currentRoom.TopicDetail != nil {
-						currentTopic := currentRoom.TopicDetail.Topic
-						if currentTopic == reqMessage.Message {
-							result = true
-						}
+			// if user.UserId != currentUserId { // do not send msg to (s)hseself
+			if user.RoomConn == nil {
+				break
+			}
+			reqMessage := &Message{}
+			err := json.Unmarshal(msg, reqMessage)
+			if err != nil {
+				println(err)
+				break
+			}
+			result := false
+			if reqMessage.Type == "answer" { // answer question
+				if currentRoom.TopicDetail != nil {
+					currentTopic := currentRoom.TopicDetail.Topic
+					if currentTopic == reqMessage.Message {
+						result = true
 					}
 				}
-				reqMessage.Result = &result
-				respMsg, err := json.Marshal(reqMessage)
-				err = user.RoomConn.WriteMessage(mtype, respMsg)
-				if err != nil {
-					log.Println("write:", err)
-					break
-				}
 			}
+			reqMessage.Result = &result
+			respMsg, err := json.Marshal(reqMessage)
+			err = user.RoomConn.WriteMessage(mtype, respMsg)
+			if err != nil {
+				log.Println("write:", err)
+				break
+			}
+			// }
 		}
 	}
 }

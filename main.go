@@ -261,8 +261,8 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 	currentUser.RoomConn = conn
 	log.Println("connect !!")
 
-	// welcomeMessage := &Message{"", client.User, "HI", nil}
-	// respMsg, err := json.Marshal(welcomeMessage)
+	// joiningMessage := &Message{"", client.User, "HI", nil}
+	// respMsg, err := json.Marshal(joiningMessage)
 	// if err != nil {
 	// 	return
 	// }
@@ -371,8 +371,16 @@ func roomHandler(w http.ResponseWriter, r *http.Request) {
 	} else if r.URL.Path == "/room/topic" {
 		roomTopicHandler(w, r)
 		return
+	} else if r.URL.Path == "/room/cleanAll" {
+		roomCleanAllHandler(w, r)
+		return
 	}
 
+}
+
+func roomCleanAllHandler(w http.ResponseWriter, r *http.Request) {
+	roomsMap = cmap.New()
+	fmt.Fprint(w, "room Clean all!!")
 }
 
 func roomUsersHandler(w http.ResponseWriter, r *http.Request) {

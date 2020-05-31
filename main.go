@@ -299,7 +299,6 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 				if user.RoomConn == nil {
 					break
 				}
-				msgStr := string(msg)
 				reqMessage := &Message{}
 				err := json.Unmarshal(msg, reqMessage)
 				if err != nil {

@@ -42,7 +42,8 @@ type TopicDetail struct {
 
 type Message struct {
 	Type    string `json:"type,omitempty"`
-	User    *User  `json:"user,omitempty"`
+	UserId  string `json:"userId,omitempty"`
+	RoomId  string `json:"roomId,omitempty"`
 	Message string `json:"message,omitempty"`
 	Result  *bool  `json:"result,omitempty"`
 }
@@ -299,16 +300,25 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 					break
 				}
 				msgStr := string(msg)
+				reqMessage := &Message{}
+				err := json.Unmarshal(msg, reqMessage)
+				if err != nil {
+					println(err)
+					break
+				}
 				result := false
+				if reqMessage.Type == "chat" { // chat room
 
-				if currentRoom.TopicDetail != nil {
-					currentTopic := currentRoom.TopicDetail.Topic
-					if currentTopic == msgStr {
-						result = true
+				} else if reqMessage.Type == "answer" { // answer question
+					if currentRoom.TopicDetail != nil {
+						currentTopic := currentRoom.TopicDetail.Topic
+						if currentTopic == msgStr {
+							result = true
+						}
 					}
 				}
-				respMsgStruct := &Message{"", user, msgStr, &result}
-				respMsg, err := json.Marshal(respMsgStruct)
+				reqMessage.Result = &result
+				respMsg, err := json.Marshal(reqMessage)
 				err = user.RoomConn.WriteMessage(mtype, respMsg)
 				if err != nil {
 					log.Println("write:", err)
@@ -534,7 +544,9 @@ func roomJoinHandler(w http.ResponseWriter, r *http.Request) {
 	if roomExist == false {
 		result = false
 	}
-
+	if userJoinRoomBean.UserName == "" {
+		result = false
+	}
 	userJoinRoomBean.Result = &result
 	if result {
 		room := roomInterface.(*Room)

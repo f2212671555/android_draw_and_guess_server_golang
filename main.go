@@ -41,11 +41,12 @@ type TopicDetail struct {
 }
 
 type Message struct {
-	Type    string `json:"type,omitempty"`
-	UserId  string `json:"userId,omitempty"`
-	RoomId  string `json:"roomId,omitempty"`
-	Message string `json:"message,omitempty"`
-	Result  *bool  `json:"result,omitempty"`
+	Type     string `json:"type,omitempty"`
+	UserId   string `json:"userId,omitempty"`
+	UserName string `json:"userName,omitempty"`
+	RoomId   string `json:"roomId,omitempty"`
+	Message  string `json:"message,omitempty"`
+	Result   *bool  `json:"result,omitempty"`
 }
 
 type RoomBean struct {

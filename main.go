@@ -276,6 +276,8 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		log.Println("disconnect !!")
 		currentUser.RoomConn = nil
+		// send others you quit
+		sendQuit(currentUser)
 		// user quit room
 		roomInterface, roomExist := roomsMap.Get(currentRoomId)
 		if roomExist {
@@ -333,6 +335,32 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			// }
 		}
+	}
+}
+
+func sendQuit(currentUser *User) {
+	currentRoomInterface, exist := roomsMap.Get(currentUser.RoomId)
+	if exist == false {
+		return
+	}
+	currentRoom := currentRoomInterface.(*Room)
+	roomUsers := currentRoom.Users // get the users in this room
+	for item := range roomUsers.Iter() {
+		userInterface := item.Val
+		user := userInterface.(*User)
+		// if user.UserId != currentUserId { // do not send msg to (s)hseself
+		if user.RoomConn == nil {
+			break
+		}
+		result := false
+		reqMessage := &Message{"quit", currentUser.UserId, currentUser.UserName, currentUser.RoomId, "", &result}
+		respMsg, err := json.Marshal(reqMessage)
+		err = user.RoomConn.WriteMessage(1, respMsg)
+		if err != nil {
+			log.Println("write:", err)
+			return
+		}
+		// }
 	}
 }
 

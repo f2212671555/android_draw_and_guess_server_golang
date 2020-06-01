@@ -276,6 +276,15 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		log.Println("disconnect !!")
 		currentUser.RoomConn = nil
+		// user quit room
+		roomInterface, roomExist := roomsMap.Get(currentRoomId)
+		if roomExist {
+			room := roomInterface.(*Room)
+			room.Users.Remove(currentUserId)
+			if room.Users.Count() == 0 {
+				roomsMap.Remove(currentRoomId)
+			}
+		}
 		conn.Close()
 	}()
 
@@ -289,7 +298,7 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 
 		currentRoomInterface, exist := roomsMap.Get(currentRoomId)
 		if exist == false {
-			return
+			break
 		}
 		currentRoom := currentRoomInterface.(*Room)
 		roomUsers := currentRoom.Users // get the users in this room

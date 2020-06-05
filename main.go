@@ -351,18 +351,18 @@ func sendAction(currentUser *User, action string) {
 		userInterface := item.Val
 		user := userInterface.(*User)
 		// if user.UserId != currentUserId { // do not send msg to (s)hseself
-		if user.RoomConn == nil {
-			break
+		if user.RoomConn != nil {
+
+			result := false
+			reqMessage := &Message{action, currentUser.UserId, currentUser.UserName, currentUser.RoomId, "", &result}
+			respMsg, err := json.Marshal(reqMessage)
+			err = user.RoomConn.WriteMessage(1, respMsg)
+			if err != nil {
+				log.Println("write:", err)
+				return
+			}
+			// }
 		}
-		result := false
-		reqMessage := &Message{action, currentUser.UserId, currentUser.UserName, currentUser.RoomId, "", &result}
-		respMsg, err := json.Marshal(reqMessage)
-		err = user.RoomConn.WriteMessage(1, respMsg)
-		if err != nil {
-			log.Println("write:", err)
-			return
-		}
-		// }
 	}
 }
 

@@ -21,6 +21,7 @@ type Room struct {
 	RoomName         string             `json:"roomName,omitempty"`
 	Users            cmap.ConcurrentMap `json:"users,omitempty"`
 	CurrentDrawOrder int                `json:"-"`
+	NextDrawOrder    int                `json:"-"`
 	TopicDetail      *TopicDetail       `json:"topicDetail,omitempty"`
 }
 
@@ -34,10 +35,11 @@ type User struct {
 }
 
 type TopicDetail struct {
-	Category string `json:"category,omitempty"`
-	Topic    string `json:"topic,omitempty"`
-	UserId   string `json:"userId,omitempty"`
-	Result   *bool  `json:"result,omitempty"`
+	Category          string `json:"category,omitempty"`
+	Topic             string `json:"topic,omitempty"`
+	CurrentDrawUserId string `json:"currentDrawUserId,omitempty"`
+	NextDrawUserId    string `json:"nextDrawUserId,omitempty"`
+	Result            *bool  `json:"result,omitempty"`
 }
 
 type Message struct {
@@ -259,29 +261,29 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
 	conn, err := upgrader.Upgrade(w, r, nil) // get *conn
-	currentUser.RoomConn = conn
-	log.Println("connect !!")
-
-	// joiningMessage := &Message{"", client.User, "HI", nil}
-	// respMsg, err := json.Marshal(joiningMessage)
-	// if err != nil {
-	// 	return
-	// }
-	// conn.WriteMessage(1, respMsg)
-
 	if err != nil {
 		log.Println("upgrade:", err)
 		return
 	}
+	currentUser.RoomConn = conn
+	log.Println("connect !!")
+
+	// send others you join
+	sendAction(currentUser, "join")
+
 	defer func() {
 		log.Println("disconnect !!")
 		currentUser.RoomConn = nil
 		// send others you quit
-		sendQuit(currentUser)
+		sendAction(currentUser, "quit")
 		// user quit room
 		roomInterface, roomExist := roomsMap.Get(currentRoomId)
 		if roomExist {
+
 			room := roomInterface.(*Room)
+			// adjust drawOrder
+			adjustDrawOrder(room, currentUser.DrawOrder)
+			//remove user form room's user map
 			room.Users.Remove(currentUserId)
 			if room.Users.Count() == 0 {
 				roomsMap.Remove(currentRoomId)
@@ -338,7 +340,7 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func sendQuit(currentUser *User) {
+func sendAction(currentUser *User, action string) {
 	currentRoomInterface, exist := roomsMap.Get(currentUser.RoomId)
 	if exist == false {
 		return
@@ -353,7 +355,7 @@ func sendQuit(currentUser *User) {
 			break
 		}
 		result := false
-		reqMessage := &Message{"quit", currentUser.UserId, currentUser.UserName, currentUser.RoomId, "", &result}
+		reqMessage := &Message{action, currentUser.UserId, currentUser.UserName, currentUser.RoomId, "", &result}
 		respMsg, err := json.Marshal(reqMessage)
 		err = user.RoomConn.WriteMessage(1, respMsg)
 		if err != nil {
@@ -361,6 +363,16 @@ func sendQuit(currentUser *User) {
 			return
 		}
 		// }
+	}
+}
+
+func adjustDrawOrder(room *Room, quitUserDrawOrder int) {
+	for item := range room.Users.Iter() {
+		userInterface := item.Val
+		user := userInterface.(*User)
+		if user.DrawOrder > quitUserDrawOrder {
+			user.DrawOrder -= 1
+		}
 	}
 }
 
@@ -457,12 +469,13 @@ func roomStartGameHandler(w http.ResponseWriter, r *http.Request) {
 	if roomId == "" || !roomExist {
 		result = false
 	}
-	topicDetail := &TopicDetail{"", "", "", &result}
+	topicDetail := &TopicDetail{"", "", "", "", &result}
 	if result {
 		userId := userToDrawDispatcher(room)
 		topicDetail.Category = category
 		topicDetail.Topic = topic
-		topicDetail.UserId = userId
+		topicDetail.CurrentDrawUserId = userId
+		topicDetail.NextDrawUserId = getNextDrawOrderUserId(room)
 		topicDetail.Result = &result
 
 		room.TopicDetail = topicDetail
@@ -478,6 +491,10 @@ func roomStartGameHandler(w http.ResponseWriter, r *http.Request) {
 }
 func userToDrawDispatcher(room *Room) string {
 
+	room.NextDrawOrder = room.CurrentDrawOrder + 1
+	room.NextDrawOrder %= room.Users.Count() // next draw order
+
+	room.CurrentDrawOrder = room.NextDrawOrder
 	targetUserId := ""
 	roomUsers := room.Users
 	for item := range roomUsers.Iter() {
@@ -485,10 +502,26 @@ func userToDrawDispatcher(room *Room) string {
 		user := userInterface.(*User)
 		if user.DrawOrder == room.CurrentDrawOrder {
 			targetUserId = user.UserId
+			room.TopicDetail.CurrentDrawUserId = targetUserId
 		}
 	}
-	room.CurrentDrawOrder += 1
-	room.CurrentDrawOrder %= roomUsers.Count()
+	return targetUserId
+}
+
+func getNextDrawOrderUserId(room *Room) string {
+
+	targetUserId := ""
+	roomUsers := room.Users
+	room.NextDrawOrder = room.CurrentDrawOrder + 1
+	room.NextDrawOrder %= roomUsers.Count() // next draw order
+	for item := range roomUsers.Iter() {
+		userInterface := item.Val
+		user := userInterface.(*User)
+		if user.DrawOrder == room.NextDrawOrder {
+			targetUserId = user.UserId
+			room.TopicDetail.NextDrawUserId = targetUserId
+		}
+	}
 	return targetUserId
 }
 
@@ -500,12 +533,11 @@ func roomTopicHandler(w http.ResponseWriter, r *http.Request) {
 		result = false
 	}
 	room := roomInterface.(*Room)
-	topicDetail := TopicDetail{"", "", "", &result}
+	topicDetail := &TopicDetail{"", "", "", "", &result}
 	if result {
 		if room.TopicDetail != nil {
-			topicDetail.Category = room.TopicDetail.Category
-			topicDetail.Topic = room.TopicDetail.Topic
-			topicDetail.UserId = room.TopicDetail.UserId
+			topicDetail = room.TopicDetail
+			topicDetail.NextDrawUserId = getNextDrawOrderUserId(room)
 		}
 	}
 	jsonBytes, err := json.Marshal(topicDetail)
@@ -561,7 +593,7 @@ func roomCreateHandler(w http.ResponseWriter, r *http.Request) {
 	if result {
 		roomId := generateRoomId()
 		respRoomBean.RoomId = roomId
-		room := &Room{roomId, roomName, cmap.New(), 1, nil}
+		room := &Room{roomId, roomName, cmap.New(), 0, 0, nil}
 		roomsMap.Set(roomId, room)
 	}
 
@@ -595,7 +627,7 @@ func roomJoinHandler(w http.ResponseWriter, r *http.Request) {
 		room := roomInterface.(*Room)
 		userJoinRoomBean.UserId = generateUserId()
 		tmpUser := &User{userJoinRoomBean.RoomId, userJoinRoomBean.UserId,
-			userJoinRoomBean.UserName, nil, nil, room.Users.Count() + 1}
+			userJoinRoomBean.UserName, nil, nil, room.Users.Count()}
 		room.Users.Set(userJoinRoomBean.UserId, tmpUser)
 	}
 

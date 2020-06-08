@@ -1,0 +1,9 @@
+[{
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.ntouandroid.drawandguess",
+      "sha256_cert_fingerprints":
+      ["A1:32:F5:F5:1C:BF:A2:0C:B3:6A:71:62:85:65:80:86:0F:41:F7:14:19:8C:08:F4:6D:38:0B:46:FB:9E:04:0B"]
+    }
+  }]

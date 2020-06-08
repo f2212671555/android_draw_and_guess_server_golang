@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
@@ -98,6 +99,7 @@ func main() {
 	http.HandleFunc("/ws/draw/", drawWsHandler)
 	http.HandleFunc("/ws/room/", roomWsHandler)
 	http.HandleFunc("/room/", roomHandler) // create, list room .etc
+	http.HandleFunc("/.well-known/assetlinks.json", appLinkHandler)
 	// http.Handle("/public/", http.FileServer(http.Dir("./public/picture/")))
 	log.Println("server start at :8899")
 
@@ -374,6 +376,20 @@ func adjustDrawOrder(room *Room, quitUserDrawOrder int) {
 			user.DrawOrder -= 1
 		}
 	}
+}
+
+func appLinkHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	file, err := os.Open(".well-known/assetlinks.json")
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	defer file.Close()
+	byteValue, _ := ioutil.ReadAll(file)
+
+	fmt.Fprint(w, string(byteValue))
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {

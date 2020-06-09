@@ -480,20 +480,24 @@ func roomStartGameHandler(w http.ResponseWriter, r *http.Request) {
 	category, topic := randomTopic()
 	roomId := r.URL.Query().Get("roomId")
 	roomInterface, roomExist := roomsMap.Get(roomId)
-	room := roomInterface.(*Room)
 	result := true
 	if roomId == "" || !roomExist {
 		result = false
 	}
 	topicDetail := &TopicDetail{"", "", "", "", &result}
 	if result {
-		userId := userToDrawDispatcher(room)
-		topicDetail.Category = category
-		topicDetail.Topic = topic
-		topicDetail.CurrentDrawUserId = userId
-		topicDetail.NextDrawUserId = getNextDrawOrderUserId(room)
-		topicDetail.Result = &result
+		room := roomInterface.(*Room)
+		if room.Users.Count() == 0 {
+			result = false
+		} else {
+			userId := userToDrawDispatcher(room)
+			topicDetail.Category = category
+			topicDetail.Topic = topic
+			topicDetail.CurrentDrawUserId = userId
+			topicDetail.NextDrawUserId = getNextDrawOrderUserId(room)
+		}
 
+		topicDetail.Result = &result
 		room.TopicDetail = topicDetail
 	}
 
@@ -508,6 +512,9 @@ func roomStartGameHandler(w http.ResponseWriter, r *http.Request) {
 func userToDrawDispatcher(room *Room) string {
 
 	room.NextDrawOrder = room.CurrentDrawOrder + 1
+	if room.Users.Count() == 0 {
+		return ""
+	}
 	room.NextDrawOrder %= room.Users.Count() // next draw order
 
 	room.CurrentDrawOrder = room.NextDrawOrder
@@ -529,6 +536,9 @@ func getNextDrawOrderUserId(room *Room) string {
 	targetUserId := ""
 	roomUsers := room.Users
 	room.NextDrawOrder = room.CurrentDrawOrder + 1
+	if roomUsers.Count() == 0 {
+		return ""
+	}
 	room.NextDrawOrder %= roomUsers.Count() // next draw order
 	for item := range roomUsers.Iter() {
 		userInterface := item.Val
@@ -547,15 +557,20 @@ func roomTopicHandler(w http.ResponseWriter, r *http.Request) {
 	roomInterface, roomExist := roomsMap.Get(roomId)
 	if roomExist == false {
 		result = false
+
 	}
-	room := roomInterface.(*Room)
 	topicDetail := &TopicDetail{"", "", "", "", &result}
+
 	if result {
-		if room.TopicDetail != nil {
+		room := roomInterface.(*Room)
+		if room.TopicDetail != nil && room.Users.Count() > 0 {
 			topicDetail = room.TopicDetail
 			topicDetail.NextDrawUserId = getNextDrawOrderUserId(room)
+		} else {
+			result = false
 		}
 	}
+	topicDetail.Result = &result
 	jsonBytes, err := json.Marshal(topicDetail)
 	if err != nil {
 		println(err)

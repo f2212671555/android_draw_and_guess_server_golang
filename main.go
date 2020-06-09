@@ -609,7 +609,7 @@ func roomCreateHandler(w http.ResponseWriter, r *http.Request) {
 	if result {
 		roomId := generateRoomId()
 		respRoomBean.RoomId = roomId
-		room := &Room{roomId, roomName, cmap.New(), 0, 0, nil}
+		room := &Room{roomId, roomName, cmap.New(), 0, 0, &TopicDetail{}}
 		roomsMap.Set(roomId, room)
 	}
 

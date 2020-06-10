@@ -33,6 +33,7 @@ type User struct {
 	DrawConn  *websocket.Conn `json:"DrawConn,omitempty"`
 	RoomConn  *websocket.Conn `json:"RoomConn,omitempty"`
 	DrawOrder int             `json:"-"`
+	Ready     *bool           `json:"-"`
 }
 
 type TopicDetail struct {
@@ -306,39 +307,113 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 		if exist == false {
 			break
 		}
+		reqMessage := &Message{}
+		err = json.Unmarshal(msg, reqMessage)
+		if err != nil {
+			println(err)
+			break
+		}
 		currentRoom := currentRoomInterface.(*Room)
-		roomUsers := currentRoom.Users // get the users in this room
-		for item := range roomUsers.Iter() {
-			userInterface := item.Val
-			user := userInterface.(*User)
-			// if user.UserId != currentUserId { // do not send msg to (s)hseself
-			if user.RoomConn != nil {
 
-				reqMessage := &Message{}
-				err := json.Unmarshal(msg, reqMessage)
-				if err != nil {
-					println(err)
-					break
-				}
-				result := false
-				if reqMessage.Type == "answer" { // answer question
-					if currentRoom.TopicDetail != nil {
-						currentTopic := currentRoom.TopicDetail.Topic
-						if currentTopic == reqMessage.Message {
-							result = true
-						}
-					}
-				}
-				reqMessage.Result = &result
-				respMsg, err := json.Marshal(reqMessage)
-				err = user.RoomConn.WriteMessage(mtype, respMsg)
-				if err != nil {
-					log.Println("write:", err)
-					break
-				}
-				// }
+		if reqMessage.Type == "answer" { // answer question
+			checkAnswer(currentRoom, reqMessage, mtype)
+		} else if reqMessage.Type == "ready" {
+			roomUsers := currentRoom.Users
+			userInterface, exist := roomUsers.Get(currentUserId)
+			if !exist {
+				return
+			}
+			user := userInterface.(*User)
+			setReadyFlag(user)
+			if checkAllReadyFlag(currentRoom) {
+				clearAllReadyFlag(currentRoom)
+				sendNextDrawTopicDetail(currentRoom, mtype)
 			}
 		}
+	}
+}
+
+func sendNextDrawTopicDetail(room *Room, mtype int) {
+	userId := room.TopicDetail.NextDrawUserId // get the next draw userId in this room
+	roomUsers := room.Users
+	userInterface, exist := roomUsers.Get(userId)
+	if !exist {
+		return //----
+	}
+	user := userInterface.(*User)
+	result := true
+	reqMessage := &Message{"nextDraw", userId, user.UserName, room.RoomId, "", &result}
+	sendReqMessageTo(reqMessage, user, mtype)
+}
+
+func sendReqMessageTo(reqMessage *Message, user *User, mtype int) {
+
+	if user.RoomConn != nil {
+		respMsg, err := json.Marshal(reqMessage)
+		err = user.RoomConn.WriteMessage(mtype, respMsg)
+		if err != nil {
+			log.Println("write:", err)
+			return
+		}
+	}
+}
+
+func sendReqMessage(reqMessage *Message, room *Room, mtype int) {
+	roomUsers := room.Users // get the users in this room
+	for item := range roomUsers.Iter() {
+		userInterface := item.Val
+		user := userInterface.(*User)
+		// if user.UserId != currentUserId { // do not send msg to (s)hseself
+		if user.RoomConn != nil {
+			respMsg, err := json.Marshal(reqMessage)
+			err = user.RoomConn.WriteMessage(mtype, respMsg)
+			if err != nil {
+				log.Println("write:", err)
+				return
+			}
+		}
+		// }
+	}
+}
+
+func checkAnswer(room *Room, reqMessage *Message, mtype int) {
+
+	currentTopic := room.TopicDetail.Topic
+	result := false
+	if currentTopic == reqMessage.Message {
+		result = true
+	}
+	reqMessage.Result = &result
+	sendReqMessage(reqMessage, room, mtype)
+
+}
+
+func setReadyFlag(user *User) {
+	flag := true
+	user.Ready = &flag
+}
+
+func checkAllReadyFlag(room *Room) bool {
+	flag := false
+	roomUsers := room.Users // get the users in this room
+	for item := range roomUsers.Iter() {
+		userInterface := item.Val
+		user := userInterface.(*User)
+		if user.Ready == &flag {
+			return false
+		}
+	}
+	return true
+}
+
+func clearAllReadyFlag(room *Room) {
+	flag := false
+	roomUsers := room.Users // get the users in this room
+	for item := range roomUsers.Iter() {
+		userInterface := item.Val
+		user := userInterface.(*User)
+
+		user.Ready = &flag
 	}
 }
 
@@ -657,8 +732,9 @@ func roomJoinHandler(w http.ResponseWriter, r *http.Request) {
 	if result {
 		room := roomInterface.(*Room)
 		userJoinRoomBean.UserId = generateUserId()
+		result = false
 		tmpUser := &User{userJoinRoomBean.RoomId, userJoinRoomBean.UserId,
-			userJoinRoomBean.UserName, nil, nil, room.Users.Count()}
+			userJoinRoomBean.UserName, nil, nil, room.Users.Count(), &result}
 		room.Users.Set(userJoinRoomBean.UserId, tmpUser)
 	}
 

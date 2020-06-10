@@ -329,6 +329,11 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 				clearAllReadyFlag(currentRoom)
 				sendNextDrawTopicDetail(currentRoom, mtype)
 			}
+		} else if reqMessage.Type == "startDraw" {
+			result := true
+			reqMessage.Type = "startGuess"
+			reqMessage.Result = &result
+			sendReqMessage(reqMessage, currentRoom, mtype)
 		}
 	}
 }
@@ -363,16 +368,8 @@ func sendReqMessage(reqMessage *Message, room *Room, mtype int) {
 	for item := range roomUsers.Iter() {
 		userInterface := item.Val
 		user := userInterface.(*User)
-		// if user.UserId != currentUserId { // do not send msg to (s)hseself
-		if user.RoomConn != nil {
-			respMsg, err := json.Marshal(reqMessage)
-			err = user.RoomConn.WriteMessage(mtype, respMsg)
-			if err != nil {
-				log.Println("write:", err)
-				return
-			}
-		}
-		// }
+
+		sendReqMessageTo(reqMessage, user, mtype)
 	}
 }
 

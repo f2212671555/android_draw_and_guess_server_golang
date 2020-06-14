@@ -34,6 +34,7 @@ type User struct {
 	RoomConn  *websocket.Conn `json:"RoomConn,omitempty"`
 	DrawOrder int             `json:"-"`
 	Ready     *bool           `json:"-"`
+	Role      string          `json:"role,omitempty"`
 }
 
 type TopicDetail struct {
@@ -64,6 +65,7 @@ type UserBean struct {
 	RoomId   string `json:"roomId,omitempty"`
 	UserId   string `json:"userId,omitempty"`
 	UserName string `json:"userName,omitempty"`
+	Role     string `json:"role,omitempty"`
 }
 
 type UserJoinRoomBean struct {
@@ -71,6 +73,7 @@ type UserJoinRoomBean struct {
 	UserName string `json:"userName,omitempty"`
 	RoomId   string `json:"roomId,omitempty"`
 	Result   *bool  `json:"result,omitempty"`
+	Role     string `json:"role,omitempty"`
 }
 
 type Category struct {
@@ -536,7 +539,7 @@ func roomUsersHandler(w http.ResponseWriter, r *http.Request) {
 		for item := range room.Users.Iter() {
 			userInterface := item.Val
 			user := userInterface.(*User)
-			userBean := UserBean{user.RoomId, user.UserId, user.UserName}
+			userBean := UserBean{user.RoomId, user.UserId, user.UserName, user.Role}
 			roomBean.UserBeans = append(roomBean.UserBeans, userBean)
 		}
 	}
@@ -662,7 +665,7 @@ func roomListHandler(w http.ResponseWriter, r *http.Request) {
 		for item := range room.Users.Iter() {
 			userInterface := item.Val
 			user := userInterface.(*User)
-			userBean := UserBean{user.RoomId, user.UserId, user.UserName}
+			userBean := UserBean{user.RoomId, user.UserId, user.UserName, user.Role}
 			userBeans = append(userBeans, userBean)
 		}
 		roomBean := RoomBean{room.RoomId, room.RoomName, userBeans, nil}
@@ -731,7 +734,7 @@ func roomJoinHandler(w http.ResponseWriter, r *http.Request) {
 		userJoinRoomBean.UserId = generateUserId()
 		result = false
 		tmpUser := &User{userJoinRoomBean.RoomId, userJoinRoomBean.UserId,
-			userJoinRoomBean.UserName, nil, nil, room.Users.Count(), &result}
+			userJoinRoomBean.UserName, nil, nil, room.Users.Count(), &result, userJoinRoomBean.Role}
 		room.Users.Set(userJoinRoomBean.UserId, tmpUser)
 	}
 
@@ -764,7 +767,7 @@ func roomQuitHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	userJoinRoomBean := &UserJoinRoomBean{"", "", "", &result}
+	userJoinRoomBean := &UserJoinRoomBean{"", "", "", &result, ""}
 	if result {
 		room := roomInterface.(*Room)
 		userJoinRoomBean.RoomId = roomId

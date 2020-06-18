@@ -300,7 +300,7 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 
 	for {
 		mtype, msg, err := conn.ReadMessage()
-		println(mtype)
+
 		if err != nil {
 			log.Println("read:", err)
 			break

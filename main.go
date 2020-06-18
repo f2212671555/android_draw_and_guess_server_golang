@@ -329,10 +329,29 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			user := userInterface.(*User)
 			setReadyFlag(user)
-			if checkAllReadyFlag(currentRoom) {
-				clearAllReadyFlag(currentRoom)
+			flag := false
+			result := true
+			for item := range roomUsers.Iter() {
+				userInterface := item.Val
+				user := userInterface.(*User)
+				if user.Ready == &flag {
+					result = false
+				}
+			}
+			if result {
+				for item := range roomUsers.Iter() {
+					userInterface := item.Val
+					user := userInterface.(*User)
+
+					user.Ready = &flag
+				}
 				sendNextDrawTopicDetail(currentRoom, mtype)
 			}
+
+			// if checkAllReadyFlag(currentRoom) {
+			// 	clearAllReadyFlag(currentRoom)
+			// 	sendNextDrawTopicDetail(currentRoom, mtype)
+			// }
 		} else {
 			result := true
 			reqMessage.Result = &result

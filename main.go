@@ -336,6 +336,9 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		} else if reqMessage.Type == "startDraw" {
 			clearAllReadyFlag(currentRoom)
+			result := true
+			reqMessage.Result = &result
+			sendReqMessage(reqMessage, currentRoom, mtype)
 		} else {
 			result := true
 			reqMessage.Result = &result

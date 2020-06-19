@@ -705,7 +705,7 @@ func roomCreateHandler(w http.ResponseWriter, r *http.Request) {
 	if result {
 		roomId := generateRoomId()
 		respRoomBean.RoomId = roomId
-		room := &Room{roomId, roomName, cmap.New(), 0, 0, &TopicDetail{}}
+		room := &Room{roomId, roomName, cmap.New(), -1, 0, &TopicDetail{}}
 		roomsMap.Set(roomId, room)
 	}
 

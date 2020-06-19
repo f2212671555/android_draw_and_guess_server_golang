@@ -738,7 +738,6 @@ func roomJoinHandler(w http.ResponseWriter, r *http.Request) {
 	if result {
 		room := roomInterface.(*Room)
 		userJoinRoomBean.UserId = generateUserId()
-		result = false
 		tmpUser := &User{userJoinRoomBean.RoomId, userJoinRoomBean.UserId,
 			userJoinRoomBean.UserName, nil, nil, room.Users.Count(), &result, userJoinRoomBean.Role}
 		room.Users.Set(userJoinRoomBean.UserId, tmpUser)

@@ -263,6 +263,8 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	currentUser := currentUserInterface.(*User)
+	result := true
+	currentUser.Ready = &result
 	upgrader := &websocket.Upgrader{
 
 		CheckOrigin: func(r *http.Request) bool { return true },

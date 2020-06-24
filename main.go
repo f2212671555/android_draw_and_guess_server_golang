@@ -200,13 +200,6 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// welcomeMessage := &Message{"", client.User, "HI", nil}
-	// respMsg, err := json.Marshal(welcomeMessage)
-	// if err != nil {
-	// 	return
-	// }
-	// conn.WriteMessage(1, respMsg)
-
 	defer func() {
 		log.Println("disconnect !!")
 		currentUser.DrawConn = nil
@@ -288,10 +281,14 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 		// user quit room
 		roomInterface, roomExist := roomsMap.Get(currentRoomId)
 		if roomExist {
-
 			room := roomInterface.(*Room)
 			// adjust drawOrder
 			adjustDrawOrder(room, currentUser.DrawOrder)
+			if room.TopicDetail != nil {
+				if room.TopicDetail.CurrentDrawUserId == currentUserId {
+					room.TopicDetail.NextDrawUserId = getNextDrawOrderUserId(room)
+				}
+			}
 			//remove user form room's user map
 			room.Users.Remove(currentUserId)
 			if room.Users.Count() == 0 {
@@ -649,7 +646,6 @@ func roomTopicHandler(w http.ResponseWriter, r *http.Request) {
 		room := roomInterface.(*Room)
 		if room.TopicDetail != nil && room.Users.Count() > 0 {
 			topicDetail = room.TopicDetail
-			topicDetail.NextDrawUserId = getNextDrawOrderUserId(room)
 		} else {
 			result = false
 		}

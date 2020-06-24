@@ -21,8 +21,8 @@ type Room struct {
 	RoomId           string             `json:"roomId,omitempty"`
 	RoomName         string             `json:"roomName,omitempty"`
 	Users            cmap.ConcurrentMap `json:"users,omitempty"`
-	CurrentDrawOrder int                `json:"-"`
-	NextDrawOrder    int                `json:"-"`
+	CurrentDrawOrder int                `json:"currentDrawOrder"`
+	NextDrawOrder    int                `json:"nextDrawOrder"`
 	TopicDetail      *TopicDetail       `json:"topicDetail,omitempty"`
 }
 
@@ -32,8 +32,8 @@ type User struct {
 	UserName  string          `json:"userName,omitempty"`
 	DrawConn  *websocket.Conn `json:"DrawConn,omitempty"`
 	RoomConn  *websocket.Conn `json:"RoomConn,omitempty"`
-	DrawOrder int             `json:"-"`
-	Ready     *bool           `json:"-"`
+	DrawOrder int             `json:"drawOrder"`
+	Ready     *bool           `json:"ready,omitempty"`
 	Role      string          `json:"role,omitempty"`
 }
 
@@ -192,8 +192,13 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
 	conn, err := upgrader.Upgrade(w, r, nil) // get *conn
+	conn.SetPingHandler(func(s string) error {
+		log.Println("drawWsHandler get ping!!!")
+		conn.WriteMessage(websocket.PongMessage, []byte("pong"))
+		return nil
+	})
 	currentUser.DrawConn = conn
-	log.Println("connect !!")
+	log.Println("drawWsHandler connect !!")
 
 	if err != nil {
 		log.Println("upgrade:", err)
@@ -201,7 +206,7 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	defer func() {
-		log.Println("disconnect !!")
+		log.Println("drawWsHandler disconnect !!")
 		currentUser.DrawConn = nil
 		conn.Close()
 	}()
@@ -267,14 +272,20 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 		log.Println("upgrade:", err)
 		return
 	}
+	conn.SetPingHandler(func(s string) error {
+		log.Println("roomWsHandler get ping!!!")
+		conn.WriteMessage(websocket.PongMessage, []byte("pong"))
+		return nil
+	})
+
 	currentUser.RoomConn = conn
-	log.Println("connect !!")
+	log.Println("roomWsHandler connect !!")
 
 	// send others you join
 	sendAction(currentUser, "join")
 
 	defer func() {
-		log.Println("disconnect !!")
+		log.Println("roomWsHandler disconnect !!")
 		currentUser.RoomConn = nil
 		// send others you quit
 		sendAction(currentUser, "quit")
@@ -299,8 +310,8 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	for {
-		mtype, msg, err := conn.ReadMessage()
 
+		mtype, msg, err := conn.ReadMessage()
 		if err != nil {
 			log.Println("read:", err)
 			break
@@ -521,10 +532,21 @@ func roomHandler(w http.ResponseWriter, r *http.Request) {
 	} else if r.URL.Path == "/room/cleanAll" {
 		roomCleanAllHandler(w, r)
 		return
+	} else if r.URL.Path == "/room/listAll" {
+		roomListAllHandler(w, r)
+		return
 	}
 
 }
+func roomListAllHandler(w http.ResponseWriter, r *http.Request) {
 
+	jsonBytes, err := json.Marshal(roomsMap)
+	if err != nil {
+		println(err)
+		return
+	}
+	fmt.Fprint(w, string(jsonBytes))
+}
 func roomCleanAllHandler(w http.ResponseWriter, r *http.Request) {
 	roomsMap = cmap.New()
 	fmt.Fprint(w, "room Clean all!!")

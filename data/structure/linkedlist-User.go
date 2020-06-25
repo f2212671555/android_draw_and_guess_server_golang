@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"sync"
 
-	"data/structure/bean"
+	"drawAndGuessServer/data/structure/bean"
 )
 
 // Node a single node that composes the list

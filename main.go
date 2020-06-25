@@ -16,8 +16,8 @@ import (
 	cmap "github.com/orcaman/concurrent-map"
 	uuid "github.com/satori/go.uuid"
 
-	a "data/structure"
-	"data/structure/bean"
+	a "drawAndGuessServer/data/structure"
+	"drawAndGuessServer/data/structure/bean"
 )
 
 type Room struct {

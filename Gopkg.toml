@@ -26,6 +26,7 @@
 
 [metadata.heroku]
   root-package = "main"
+  install = [ "."]
 
 [[constraint]]
   name = "github.com/gorilla/websocket"

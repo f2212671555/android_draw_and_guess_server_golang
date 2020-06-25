@@ -97,7 +97,7 @@ func (ll *UserLinkedList) Remove(id string) bool {
 	ll.lock.Lock()
 	defer ll.lock.Unlock()
 	node := ll.head
-	pre := node
+	pre := ll.head
 	for {
 		if node.content.UserId == id {
 			break
@@ -108,7 +108,12 @@ func (ll *UserLinkedList) Remove(id string) bool {
 		pre = node
 		node = node.next
 	}
-	pre.next = node.next
+	if pre == ll.head {
+		ll.head = node.next
+	} else {
+		pre.next = node.next
+	}
+
 	ll.size--
 	return true
 }

@@ -287,8 +287,6 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		log.Println("roomWsHandler disconnect !!")
 		currentUser.RoomConn = nil
-		// send others you quit
-		sendAction(currentUser, "quit")
 		// user quit room
 		roomInterface, roomExist := roomsMap.Get(currentRoomId)
 		if roomExist {
@@ -307,6 +305,8 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+		// send others you quit
+		sendAction(currentUser, "quit")
 		conn.Close()
 	}()
 

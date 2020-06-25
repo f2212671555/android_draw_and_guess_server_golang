@@ -25,8 +25,8 @@
 #   unused-packages = true
 
 [metadata.heroku]
-  root-package = "main"
-  install = [ "."]
+  root-package = "drawAndGuessServer"
+  install = [ "./..." ]
 
 [[constraint]]
   name = "github.com/gorilla/websocket"

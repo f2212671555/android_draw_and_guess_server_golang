@@ -612,7 +612,7 @@ func roomStartGameHandler(w http.ResponseWriter, r *http.Request) {
 		if room.Users.Size() == 0 {
 			result = false
 		} else {
-			userToDrawDispatcher(room)
+			topicDetail.CurrentDrawUserId = userToDrawDispatcher(room)
 			topicDetail.NextDrawUserId = getNextDrawOrderUserId(room)
 			topicDetail.Category = category
 			topicDetail.Topic = topic

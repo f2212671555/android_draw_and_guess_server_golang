@@ -296,10 +296,9 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 			if room.TopicDetail != nil {
 				if room.TopicDetail.CurrentDrawUserId == currentUserId {
 					// dispatch new person to draw
+					room.TopicDetail.CurrentDrawUserId = ""
 					room.TopicDetail.NextDrawUserId = getNextDrawOrderUserId(room)
-					//
-					//
-					//
+					sendNextDrawTopicDetail(room, 1)
 				}
 			}
 			//remove user form room's user map

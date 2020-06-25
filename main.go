@@ -219,7 +219,7 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 		currentRoom := currentRoomInterface.(*Room)
 		roomUsers := currentRoom.Users // get the users in this room
 		// concurrent loop - begin
-		roomUsers.Lock()
+		roomUsers.RLock()
 		userNode := roomUsers.Head()
 		if userNode != nil {
 			for {
@@ -240,7 +240,7 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 				userNode = userNode.Next()
 			}
 		}
-		roomUsers.Unlock()
+		roomUsers.RUnlock()
 		// concurrent loop - end
 	}
 }

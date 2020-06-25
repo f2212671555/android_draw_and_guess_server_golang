@@ -196,8 +196,6 @@ func (ll *UserLinkedList) String() {
 
 // Head returns a pointer to the first node of the list
 func (ll *UserLinkedList) Head() *Node {
-	ll.lock.RLock()
-	defer ll.lock.RUnlock()
 	return ll.head
 }
 

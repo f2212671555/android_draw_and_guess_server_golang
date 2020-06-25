@@ -17,7 +17,7 @@ import (
 
 // Node a single node that composes the list
 type Node struct {
-	content bean.User
+	content *bean.User
 	next    *Node
 }
 
@@ -29,7 +29,7 @@ type UserLinkedList struct {
 }
 
 // Append adds an User to the end of the linked list
-func (ll *UserLinkedList) Append(t bean.User) {
+func (ll *UserLinkedList) Append(t *bean.User) {
 	ll.lock.Lock()
 	node := Node{t, nil}
 	if ll.head == nil {
@@ -49,7 +49,7 @@ func (ll *UserLinkedList) Append(t bean.User) {
 }
 
 // Insert adds an User at position i
-func (ll *UserLinkedList) Insert(i int, t bean.User) error {
+func (ll *UserLinkedList) Insert(i int, t *bean.User) error {
 	ll.lock.Lock()
 	defer ll.lock.Unlock()
 	if i < 0 || i > ll.size {
@@ -89,11 +89,32 @@ func (ll *UserLinkedList) RemoveAt(i int) (*bean.User, error) {
 	remove := node.next
 	node.next = remove.next
 	ll.size--
-	return &remove.content, nil
+	return remove.content, nil
+}
+
+// RemoveAt removes a node at position i
+func (ll *UserLinkedList) Remove(id string) bool {
+	ll.lock.Lock()
+	defer ll.lock.Unlock()
+	node := ll.head
+	pre := node
+	for {
+		if node.content.UserId == id {
+			break
+		}
+		if node.next == nil {
+			return false
+		}
+		pre = node
+		node = node.next
+	}
+	pre.next = node.next
+	ll.size--
+	return true
 }
 
 // IndexOf returns the position of the User t
-func (ll *UserLinkedList) IndexOf(t bean.User) int {
+func (ll *UserLinkedList) IndexOf(t *bean.User) int {
 	ll.lock.RLock()
 	defer ll.lock.RUnlock()
 	node := ll.head
@@ -107,6 +128,22 @@ func (ll *UserLinkedList) IndexOf(t bean.User) int {
 		}
 		node = node.next
 		j++
+	}
+}
+
+// LookFor returns the User t and bool result
+func (ll *UserLinkedList) LookFor(id string) (*bean.User, bool) {
+	ll.lock.RLock()
+	defer ll.lock.RUnlock()
+	node := ll.head
+	for {
+		if node.content.UserId == id {
+			return node.content, true
+		}
+		if node.next == nil {
+			return nil, false
+		}
+		node = node.next
 	}
 }
 
@@ -124,14 +161,17 @@ func (ll *UserLinkedList) IsEmpty() bool {
 func (ll *UserLinkedList) Size() int {
 	ll.lock.RLock()
 	defer ll.lock.RUnlock()
-	size := 1
+	size := 0
 	last := ll.head
 	for {
-		if last == nil || last.next == nil {
+		if last == nil {
+			break
+		}
+		size++
+		if last.next == nil {
 			break
 		}
 		last = last.next
-		size++
 	}
 	return size
 }
@@ -159,4 +199,34 @@ func (ll *UserLinkedList) Head() *Node {
 	ll.lock.RLock()
 	defer ll.lock.RUnlock()
 	return ll.head
+}
+
+// Head returns a pointer to the first node of the list
+func (node *Node) Next() *Node {
+	return node.next
+}
+
+// Head returns a pointer to the first node of the list
+func (node *Node) Content() *bean.User {
+	return node.content
+}
+
+// Lock
+func (ll *UserLinkedList) Lock() {
+	ll.lock.RLock()
+}
+
+// RLock
+func (ll *UserLinkedList) RLock() {
+	ll.lock.RLock()
+}
+
+// Unlock
+func (ll *UserLinkedList) Unlock() {
+	ll.lock.Unlock()
+}
+
+// RUnlock
+func (ll *UserLinkedList) RUnlock() {
+	ll.lock.RUnlock()
 }

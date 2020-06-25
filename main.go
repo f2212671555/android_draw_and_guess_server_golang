@@ -293,6 +293,11 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 		roomInterface, roomExist := roomsMap.Get(currentRoomId)
 		if roomExist {
 			room := roomInterface.(*Room)
+			//remove user form room's user map
+			room.Users.Remove(currentUserId)
+			if room.Users.Size() == 0 {
+				roomsMap.Remove(currentRoomId)
+			}
 			if room.TopicDetail != nil {
 				if room.TopicDetail.CurrentDrawUserId == currentUserId {
 					// dispatch new person to draw
@@ -300,11 +305,6 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 					room.TopicDetail.NextDrawUserId = getNextDrawOrderUserId(room)
 					sendNextDrawTopicDetail(room, 1)
 				}
-			}
-			//remove user form room's user map
-			room.Users.Remove(currentUserId)
-			if room.Users.Size() == 0 {
-				roomsMap.Remove(currentRoomId)
 			}
 		}
 		conn.Close()

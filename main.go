@@ -21,12 +21,10 @@ import (
 )
 
 type Room struct {
-	RoomId           string                     `json:"roomId,omitempty"`
-	RoomName         string                     `json:"roomName,omitempty"`
-	Users            *linkedlist.UserLinkedList `json:"users,omitempty"`
-	CurrentDrawOrder int                        `json:"currentDrawOrder"`
-	NextDrawOrder    int                        `json:"nextDrawOrder"`
-	TopicDetail      *TopicDetail               `json:"topicDetail,omitempty"`
+	RoomId      string                     `json:"roomId,omitempty"`
+	RoomName    string                     `json:"roomName,omitempty"`
+	Users       *linkedlist.UserLinkedList `json:"users,omitempty"`
+	TopicDetail *TopicDetail               `json:"topicDetail,omitempty"`
 }
 
 type TopicDetail struct {
@@ -295,11 +293,13 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 		roomInterface, roomExist := roomsMap.Get(currentRoomId)
 		if roomExist {
 			room := roomInterface.(*Room)
-			// adjust drawOrder
-			adjustDrawOrder(room, currentUser.DrawOrder)
 			if room.TopicDetail != nil {
 				if room.TopicDetail.CurrentDrawUserId == currentUserId {
+					// dispatch new person to draw
 					room.TopicDetail.NextDrawUserId = getNextDrawOrderUserId(room)
+					//
+					//
+					//
 				}
 			}
 			//remove user form room's user map
@@ -348,7 +348,7 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 				sendNextDrawTopicDetail(currentRoom, mtype)
 			}
 		} else if reqMessage.Type == "startDraw" {
-			// clearAllReadyFlag(currentRoom)
+			clearAllReadyFlag(currentRoom)
 			result := true
 			reqMessage.Result = &result
 			sendReqMessage(reqMessage, currentRoom, mtype)
@@ -471,23 +471,6 @@ func sendAction(currentUser *bean.User, action string) {
 				log.Println("write:", err)
 				return
 			}
-		}
-		if node.Next() == nil {
-			break
-		}
-		node = node.Next()
-	}
-	// concurrent loop - end
-}
-
-func adjustDrawOrder(room *Room, quitUserDrawOrder int) {
-	// concurrent loop - begin
-	room.Users.RLock()
-	defer room.Users.RUnlock()
-	node := room.Users.Head() // get the users in this room
-	for {
-		if node.Content().DrawOrder > quitUserDrawOrder {
-			node.Content().DrawOrder -= 1
 		}
 		if node.Next() == nil {
 			break
@@ -629,11 +612,10 @@ func roomStartGameHandler(w http.ResponseWriter, r *http.Request) {
 		if room.Users.Size() == 0 {
 			result = false
 		} else {
-			userId := userToDrawDispatcher(room)
+			userToDrawDispatcher(room)
+			topicDetail.NextDrawUserId = getNextDrawOrderUserId(room)
 			topicDetail.Category = category
 			topicDetail.Topic = topic
-			topicDetail.CurrentDrawUserId = userId
-			topicDetail.NextDrawUserId = getNextDrawOrderUserId(room)
 		}
 
 		topicDetail.Result = &result
@@ -650,29 +632,31 @@ func roomStartGameHandler(w http.ResponseWriter, r *http.Request) {
 }
 func userToDrawDispatcher(room *Room) string {
 
-	room.NextDrawOrder = room.CurrentDrawOrder + 1
 	if room.Users.Size() == 0 {
 		return ""
 	}
-	room.NextDrawOrder %= room.Users.Size() // next draw order
 
-	room.CurrentDrawOrder = room.NextDrawOrder
 	targetUserId := ""
 	// concurrent loop - begin
 	room.Users.RLock()
-	defer room.Users.RUnlock()
 	node := room.Users.Head() // get the users in this room
+	if room.TopicDetail.NextDrawUserId == "" {
+		room.TopicDetail.NextDrawUserId = node.Content().UserId
+	}
 	for {
-		if node.Content().DrawOrder == room.CurrentDrawOrder {
-			targetUserId = node.Content().UserId
-			room.TopicDetail.CurrentDrawUserId = targetUserId
+		if node.Content().UserId == room.TopicDetail.NextDrawUserId {
+			targetUserId = room.TopicDetail.NextDrawUserId
+			break
 		}
 		if node.Next() == nil {
+			targetUserId = room.Users.Head().Content().UserId
 			break
 		}
 		node = node.Next()
 	}
+	room.Users.RUnlock()
 	// concurrent loop - end
+	room.TopicDetail.CurrentDrawUserId = targetUserId
 	return targetUserId
 }
 
@@ -680,25 +664,33 @@ func getNextDrawOrderUserId(room *Room) string {
 
 	targetUserId := ""
 	roomUsers := room.Users
-	room.NextDrawOrder = room.CurrentDrawOrder + 1
 	if roomUsers.Size() == 0 {
 		return ""
 	}
-	room.NextDrawOrder %= roomUsers.Size() // next draw order
+
 	// concurrent loop - begin
 	room.Users.RLock()
-	defer room.Users.RUnlock()
 	node := room.Users.Head() // get the users in this room
 	for {
-		if node.Content().DrawOrder == room.NextDrawOrder {
-			targetUserId = node.Content().UserId
-			room.TopicDetail.NextDrawUserId = targetUserId
+		if node.Content().UserId == room.TopicDetail.CurrentDrawUserId {
+			nextUser := node.Next()
+			if nextUser != nil {
+				targetUserId = nextUser.Content().UserId
+			} else {
+				// this one is at the last one
+				targetUserId = room.Users.Head().Content().UserId
+			}
+			break
 		}
 		if node.Next() == nil {
+			// can not find UserId
+			// this one is at the last one
+			targetUserId = room.Users.Head().Content().UserId
 			break
 		}
 		node = node.Next()
 	}
+	room.Users.RUnlock()
 	// concurrent loop - end
 	return targetUserId
 }
@@ -785,7 +777,7 @@ func roomCreateHandler(w http.ResponseWriter, r *http.Request) {
 	if result {
 		roomId := generateRoomId()
 		respRoomBean.RoomId = roomId
-		room := &Room{roomId, roomName, &linkedlist.UserLinkedList{}, -1, 0, &TopicDetail{}}
+		room := &Room{roomId, roomName, &linkedlist.UserLinkedList{}, &TopicDetail{}}
 		roomsMap.Set(roomId, room)
 	}
 
@@ -820,7 +812,7 @@ func roomJoinHandler(w http.ResponseWriter, r *http.Request) {
 		userJoinRoomBean.UserId = generateUserId()
 		userJoinRoomBean.RoomName = room.RoomName
 		tmpUser := &bean.User{RoomId: userJoinRoomBean.RoomId, UserId: userJoinRoomBean.UserId,
-			UserName: userJoinRoomBean.UserName, DrawConn: nil, RoomConn: nil, DrawOrder: room.Users.Size(), Ready: &result, Role: userJoinRoomBean.Role}
+			UserName: userJoinRoomBean.UserName, DrawConn: nil, RoomConn: nil, Ready: &result, Role: userJoinRoomBean.Role}
 		room.Users.Append(tmpUser)
 	}
 

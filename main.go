@@ -15,6 +15,9 @@ import (
 	"github.com/gorilla/websocket"
 	cmap "github.com/orcaman/concurrent-map"
 	uuid "github.com/satori/go.uuid"
+
+	a "drawAndGuessServer/data/structure"
+	"drawAndGuessServer/data/structure/bean"
 )
 
 type Room struct {
@@ -24,17 +27,6 @@ type Room struct {
 	CurrentDrawOrder int                `json:"currentDrawOrder"`
 	NextDrawOrder    int                `json:"nextDrawOrder"`
 	TopicDetail      *TopicDetail       `json:"topicDetail,omitempty"`
-}
-
-type User struct {
-	RoomId    string          `json:"roomId,omitempty"`
-	UserId    string          `json:"userId,omitempty"`
-	UserName  string          `json:"userName,omitempty"`
-	DrawConn  *websocket.Conn `json:"DrawConn,omitempty"`
-	RoomConn  *websocket.Conn `json:"RoomConn,omitempty"`
-	DrawOrder int             `json:"drawOrder"`
-	Ready     *bool           `json:"ready,omitempty"`
-	Role      string          `json:"role,omitempty"`
 }
 
 type TopicDetail struct {
@@ -94,8 +86,11 @@ func initSafeMap() {
 }
 
 var port = "8899"
+var ll a.UserLinkedList
 
 func main() {
+	t := bean.User{}
+	ll.Append(t)
 
 	initSafeMap()
 	loading()
@@ -106,11 +101,11 @@ func main() {
 	http.HandleFunc("/room/", roomHandler) // create, list room .etc
 	http.HandleFunc("/.well-known/assetlinks.json", appLinkHandler)
 	// http.Handle("/public/", http.FileServer(http.Dir("./public/picture/")))
-	log.Println("server start at :8899")
 
 	if v := os.Getenv("PORT"); len(v) > 0 {
 		port = v
 	}
+	log.Println("server start at :" + port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 
 }
@@ -186,7 +181,7 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 	if userExist == false {
 		return
 	}
-	currentUser := currentUserInterface.(*User)
+	currentUser := currentUserInterface.(*bean.User)
 	upgrader := &websocket.Upgrader{
 
 		CheckOrigin: func(r *http.Request) bool { return true },
@@ -227,7 +222,7 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 		roomUsers := currentRoom.Users // get the users in this room
 		for item := range roomUsers.Iter() {
 			userInterface := item.Val
-			user := userInterface.(*User)
+			user := userInterface.(*bean.User)
 			if user.UserId != currentUserId { // do not send msg to (s)hseself
 				if user.DrawConn == nil {
 					log.Println("user DrawConn is nil!!")
@@ -260,7 +255,7 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 	if userExist == false {
 		return
 	}
-	currentUser := currentUserInterface.(*User)
+	currentUser := currentUserInterface.(*bean.User)
 	result := true
 	currentUser.Ready = &result
 	upgrader := &websocket.Upgrader{
@@ -338,7 +333,7 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 			if !exist {
 				return
 			}
-			user := userInterface.(*User)
+			user := userInterface.(*bean.User)
 			setReadyFlag(user)
 			var result = checkAllReadyFlag(currentRoom)
 			if result {
@@ -365,13 +360,13 @@ func sendNextDrawTopicDetail(room *Room, mtype int) {
 	if !exist {
 		return //----
 	}
-	user := userInterface.(*User)
+	user := userInterface.(*bean.User)
 	result := true
 	reqMessage := &Message{"nextDraw", userId, user.UserName, room.RoomId, "", &result}
 	sendReqMessageTo(reqMessage, user, mtype)
 }
 
-func sendReqMessageTo(reqMessage *Message, user *User, mtype int) {
+func sendReqMessageTo(reqMessage *Message, user *bean.User, mtype int) {
 
 	if user.RoomConn != nil {
 		respMsg, err := json.Marshal(reqMessage)
@@ -387,7 +382,7 @@ func sendReqMessage(reqMessage *Message, room *Room, mtype int) {
 	roomUsers := room.Users // get the users in this room
 	for item := range roomUsers.Iter() {
 		userInterface := item.Val
-		user := userInterface.(*User)
+		user := userInterface.(*bean.User)
 
 		sendReqMessageTo(reqMessage, user, mtype)
 	}
@@ -405,7 +400,7 @@ func checkAnswer(room *Room, reqMessage *Message, mtype int) {
 
 }
 
-func setReadyFlag(user *User) {
+func setReadyFlag(user *bean.User) {
 	flag := true
 	user.Ready = &flag
 }
@@ -415,7 +410,7 @@ func checkAllReadyFlag(room *Room) bool {
 	roomUsers := room.Users // get the users in this room
 	for item := range roomUsers.Iter() {
 		userInterface := item.Val
-		user := userInterface.(*User)
+		user := userInterface.(*bean.User)
 		if *(user.Ready) == false {
 			return false
 		}
@@ -428,13 +423,13 @@ func clearAllReadyFlag(room *Room) {
 	roomUsers := room.Users // get the users in this room
 	for item := range roomUsers.Iter() {
 		userInterface := item.Val
-		user := userInterface.(*User)
+		user := userInterface.(*bean.User)
 
 		user.Ready = &flag
 	}
 }
 
-func sendAction(currentUser *User, action string) {
+func sendAction(currentUser *bean.User, action string) {
 	currentRoomInterface, exist := roomsMap.Get(currentUser.RoomId)
 	if exist == false {
 		return
@@ -443,7 +438,7 @@ func sendAction(currentUser *User, action string) {
 	roomUsers := currentRoom.Users // get the users in this room
 	for item := range roomUsers.Iter() {
 		userInterface := item.Val
-		user := userInterface.(*User)
+		user := userInterface.(*bean.User)
 		// if user.UserId != currentUserId { // do not send msg to (s)hseself
 		if user.RoomConn != nil {
 
@@ -463,7 +458,7 @@ func sendAction(currentUser *User, action string) {
 func adjustDrawOrder(room *Room, quitUserDrawOrder int) {
 	for item := range room.Users.Iter() {
 		userInterface := item.Val
-		user := userInterface.(*User)
+		user := userInterface.(*bean.User)
 		if user.DrawOrder > quitUserDrawOrder {
 			user.DrawOrder -= 1
 		}
@@ -566,7 +561,7 @@ func roomUsersHandler(w http.ResponseWriter, r *http.Request) {
 		roomBean.RoomName = room.RoomName
 		for item := range room.Users.Iter() {
 			userInterface := item.Val
-			user := userInterface.(*User)
+			user := userInterface.(*bean.User)
 			userBean := UserBean{user.RoomId, user.UserId, user.UserName, user.Role}
 			roomBean.UserBeans = append(roomBean.UserBeans, userBean)
 		}
@@ -625,7 +620,7 @@ func userToDrawDispatcher(room *Room) string {
 	roomUsers := room.Users
 	for item := range roomUsers.Iter() {
 		userInterface := item.Val
-		user := userInterface.(*User)
+		user := userInterface.(*bean.User)
 		if user.DrawOrder == room.CurrentDrawOrder {
 			targetUserId = user.UserId
 			room.TopicDetail.CurrentDrawUserId = targetUserId
@@ -645,7 +640,7 @@ func getNextDrawOrderUserId(room *Room) string {
 	room.NextDrawOrder %= roomUsers.Count() // next draw order
 	for item := range roomUsers.Iter() {
 		userInterface := item.Val
-		user := userInterface.(*User)
+		user := userInterface.(*bean.User)
 		if user.DrawOrder == room.NextDrawOrder {
 			targetUserId = user.UserId
 			room.TopicDetail.NextDrawUserId = targetUserId
@@ -691,7 +686,7 @@ func roomListHandler(w http.ResponseWriter, r *http.Request) {
 		userBeans := make([]UserBean, 0, room.Users.Count())
 		for item := range room.Users.Iter() {
 			userInterface := item.Val
-			user := userInterface.(*User)
+			user := userInterface.(*bean.User)
 			userBean := UserBean{user.RoomId, user.UserId, user.UserName, user.Role}
 			userBeans = append(userBeans, userBean)
 		}
@@ -760,8 +755,8 @@ func roomJoinHandler(w http.ResponseWriter, r *http.Request) {
 		room := roomInterface.(*Room)
 		userJoinRoomBean.UserId = generateUserId()
 		userJoinRoomBean.RoomName = room.RoomName
-		tmpUser := &User{userJoinRoomBean.RoomId, userJoinRoomBean.UserId,
-			userJoinRoomBean.UserName, nil, nil, room.Users.Count(), &result, userJoinRoomBean.Role}
+		tmpUser := &bean.User{RoomId: userJoinRoomBean.RoomId, UserId: userJoinRoomBean.UserId,
+			UserName: userJoinRoomBean.UserName, DrawConn: nil, RoomConn: nil, DrawOrder: room.Users.Count(), Ready: &result, Role: userJoinRoomBean.Role}
 		room.Users.Set(userJoinRoomBean.UserId, tmpUser)
 	}
 
@@ -800,7 +795,7 @@ func roomQuitHandler(w http.ResponseWriter, r *http.Request) {
 		userJoinRoomBean.RoomId = roomId
 		userJoinRoomBean.UserId = userId
 		userInterface, _ := room.Users.Get(userId) //
-		user := userInterface.(*User)
+		user := userInterface.(*bean.User)
 		userJoinRoomBean.UserName = user.UserName
 		userJoinRoomBean.RoomName = room.RoomName
 		userJoinRoomBean.Result = &result

@@ -207,7 +207,7 @@ func drawWsHandler(w http.ResponseWriter, r *http.Request) {
 			log.Println("read:", err)
 			break
 		}
-		log.Printf("receive: %s\n", msg)
+		// log.Printf("receive: %s\n", msg)
 
 		currentRoomInterface, exist := roomsMap.Get(currentRoomId) // get current room
 		if exist == false {

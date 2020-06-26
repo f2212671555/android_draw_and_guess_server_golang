@@ -308,6 +308,7 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 					// dispatch new person to draw
 					room.TopicDetail.CurrentDrawUserId = ""
 					room.TopicDetail.NextDrawUserId = getNextDrawOrderUserId(room)
+					clearAllReadyFlag(currentRoom)
 					sendAction(currentUser, "gameStop")
 					// sendNextDrawTopicDetail(room, 1)
 				}
@@ -338,15 +339,15 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 		currentRoom := currentRoomInterface.(*Room)
 
 		if reqMessage.Type == "answer" { // answer question
-			checkAnswer(currentRoom, reqMessage, mtype)
-		} else if reqMessage.Type == "ready" {
-			roomUsers := currentRoom.Users
-			user, exist := roomUsers.LookFor(currentUserId)
-			if !exist {
-				return
+			aResult := checkAnswer(currentRoom, currentUser, reqMessage, mtype)
+			currentUser.AnswerCurrent = &aResult
+			gResult := checkGameRoundEnd(currentRoom)
+			if gResult {
+				sendAction(currentUser, "gameRoundEnd")
 			}
+		} else if reqMessage.Type == "ready" {
 
-			setReadyFlag(user)
+			setReadyFlag(currentUser)
 			var result = checkAllReadyFlag(currentRoom)
 			if result {
 				clearAllReadyFlag(currentRoom)
@@ -405,16 +406,35 @@ func sendReqMessage(reqMessage *Message, room *Room, mtype int) {
 	// concurrent loop - end
 }
 
-func checkAnswer(room *Room, reqMessage *Message, mtype int) {
+func checkAnswer(room *Room, user *bean.User, reqMessage *Message, mtype int) bool {
 
 	currentTopic := room.TopicDetail.Topic
 	result := false
 	if currentTopic == reqMessage.Message {
 		result = true
 	}
+
 	reqMessage.Result = &result
 	sendReqMessage(reqMessage, room, mtype)
+	return result
+}
 
+func checkGameRoundEnd(room *Room) bool {
+	// concurrent loop - begin
+	room.Users.RLock()
+	defer room.Users.RUnlock()
+	node := room.Users.Head() // get the users in this room
+	for {
+		if *(node.Content().AnswerCurrent) == false {
+			return false
+		}
+		if node.Next() == nil {
+			break
+		}
+		node = node.Next()
+	}
+	return true
+	// concurrent loop - end
 }
 
 func setReadyFlag(user *bean.User) {
@@ -819,8 +839,9 @@ func roomJoinHandler(w http.ResponseWriter, r *http.Request) {
 		room := roomInterface.(*Room)
 		userJoinRoomBean.UserId = generateUserId()
 		userJoinRoomBean.RoomName = room.RoomName
+		falseResult := false
 		tmpUser := &bean.User{RoomId: userJoinRoomBean.RoomId, UserId: userJoinRoomBean.UserId,
-			UserName: userJoinRoomBean.UserName, DrawConn: nil, RoomConn: nil, Ready: &result, Role: userJoinRoomBean.Role}
+			UserName: userJoinRoomBean.UserName, DrawConn: nil, RoomConn: nil, AnswerCurrent: &falseResult, Ready: &result, Role: userJoinRoomBean.Role}
 		room.Users.Append(tmpUser)
 	}
 

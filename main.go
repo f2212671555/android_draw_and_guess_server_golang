@@ -287,6 +287,8 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		log.Println("roomWsHandler disconnect !!")
 		currentUser.RoomConn = nil
+		// send others you quit
+		sendAction(currentUser, "quit")
 		// user quit room
 		roomInterface, roomExist := roomsMap.Get(currentRoomId)
 		if roomExist {
@@ -297,7 +299,13 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 				roomsMap.Remove(currentRoomId)
 			}
 			if room.TopicDetail != nil {
+				println("123")
+				if room.TopicDetail.CurrentDrawUserId == "" {
+					println("456-1")
+					sendAction(currentUser, "roomQuit")
+				}
 				if room.TopicDetail.CurrentDrawUserId == currentUserId {
+					println("456-2")
 					// dispatch new person to draw
 					room.TopicDetail.CurrentDrawUserId = ""
 					room.TopicDetail.NextDrawUserId = getNextDrawOrderUserId(room)
@@ -306,8 +314,6 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		// send others you quit
-		sendAction(currentUser, "quit")
 		conn.Close()
 	}()
 

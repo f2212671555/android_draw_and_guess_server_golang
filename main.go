@@ -287,25 +287,24 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		log.Println("roomWsHandler disconnect !!")
 		currentUser.RoomConn = nil
-		// send others you quit
-		sendAction(currentUser, "quit")
 		// user quit room
 		roomInterface, roomExist := roomsMap.Get(currentRoomId)
 		if roomExist {
 			room := roomInterface.(*Room)
-			//remove user form room's user map
+			// remove user form room's user map
 			room.Users.Remove(currentUserId)
 			if room.Users.Size() == 0 {
 				roomsMap.Remove(currentRoomId)
 			}
+			// send others you quit
+			sendAction(currentUser, "quit")
 			if room.TopicDetail != nil {
-				println("123")
-				if room.TopicDetail.CurrentDrawUserId == "" {
-					println("456-1")
+				// println("123")
+				if currentUser.Role == "ROOM_ROLE_MANAGER" {
+					// println("456-1")
 					sendAction(currentUser, "roomQuit")
-				}
-				if room.TopicDetail.CurrentDrawUserId == currentUserId {
-					println("456-2")
+				} else if room.TopicDetail.CurrentDrawUserId == currentUserId {
+					// println("456-2")
 					// dispatch new person to draw
 					room.TopicDetail.CurrentDrawUserId = ""
 					room.TopicDetail.NextDrawUserId = getNextDrawOrderUserId(room)
@@ -467,6 +466,9 @@ func sendAction(currentUser *bean.User, action string) {
 	currentRoom.Users.RLock()
 	defer currentRoom.Users.RUnlock()
 	node := currentRoom.Users.Head() // get the users in this room
+	if node == nil {
+		return
+	}
 	for {
 		if node.Content().RoomConn != nil {
 			result := false

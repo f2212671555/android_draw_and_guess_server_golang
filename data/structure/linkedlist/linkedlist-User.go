@@ -108,12 +108,11 @@ func (ll *UserLinkedList) Remove(id string) bool {
 		pre = node
 		node = node.next
 	}
-	if pre == ll.head {
+	if node == ll.head {
 		ll.head = node.next
 	} else {
 		pre.next = node.next
 	}
-
 	ll.size--
 	return true
 }

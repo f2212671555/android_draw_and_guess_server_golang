@@ -301,7 +301,8 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 					// dispatch new person to draw
 					room.TopicDetail.CurrentDrawUserId = ""
 					room.TopicDetail.NextDrawUserId = getNextDrawOrderUserId(room)
-					sendNextDrawTopicDetail(room, 1)
+					sendAction(currentUser, "gameStop")
+					// sendNextDrawTopicDetail(room, 1)
 				}
 			}
 		}

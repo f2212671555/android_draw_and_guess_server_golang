@@ -437,8 +437,8 @@ func checkAllReadyFlag(room *Room) bool {
 
 func clearAllReadyFlag(room *Room) {
 	// concurrent loop - begin
-	room.Users.RLock()
-	defer room.Users.RUnlock()
+	room.Users.Lock()
+	defer room.Users.Unlock()
 	node := room.Users.Head() // get the users in this room
 	flag := false
 	for {

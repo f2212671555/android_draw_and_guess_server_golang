@@ -343,6 +343,7 @@ func roomWsHandler(w http.ResponseWriter, r *http.Request) {
 			currentUser.AnswerCurrent = &aResult
 			gResult := checkGameRoundEnd(currentRoom)
 			if gResult {
+				cleanGameRoundEndFlag(currentRoom)
 				sendAction(currentUser, "gameRoundEnd")
 			}
 		} else if reqMessage.Type == "ready" {
@@ -425,8 +426,10 @@ func checkGameRoundEnd(room *Room) bool {
 	defer room.Users.RUnlock()
 	node := room.Users.Head() // get the users in this room
 	for {
-		if *(node.Content().AnswerCurrent) == false {
-			return false
+		if node.Content().Role == "ROOM_ROLE_GENERAL_MEMBER" {
+			if *(node.Content().AnswerCurrent) == false {
+				return false
+			}
 		}
 		if node.Next() == nil {
 			break
@@ -434,6 +437,22 @@ func checkGameRoundEnd(room *Room) bool {
 		node = node.Next()
 	}
 	return true
+	// concurrent loop - end
+}
+
+func cleanGameRoundEndFlag(room *Room) {
+	// concurrent loop - begin
+	flag := false
+	room.Users.RLock()
+	defer room.Users.RUnlock()
+	node := room.Users.Head() // get the users in this room
+	for {
+		node.Content().AnswerCurrent = &flag
+		if node.Next() == nil {
+			break
+		}
+		node = node.Next()
+	}
 	// concurrent loop - end
 }
 
